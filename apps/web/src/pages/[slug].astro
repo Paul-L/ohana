@@ -1,0 +1,21 @@
+---
+// Pages libres gérées dans Directus (à propos, accès, mentions légales…)
+import Base from "@/layouts/Base.astro";
+import { directus, readItems, assetUrl, published } from "@/lib/directus";
+import { editable } from "@/lib/visual-editing";
+
+const ve = Astro.locals.visualEditing;
+const [page] = await directus.request(
+  readItems("pages", { filter: { ...published, slug: { _eq: Astro.params.slug!, _neq: "accueil" } }, limit: 1 }),
+);
+if (!page) return Astro.rewrite("/404");
+---
+
+<Base title={page.title} description={page.seo_description} image={page.cover}>
+  <article class="mx-auto max-w-3xl px-4 py-16" {...editable(ve, "pages", page.id, ["title", "intro", "content", "cover"], "drawer")}>
+    <h1 class="text-4xl">{page.title}</h1>
+    {page.intro && <p class="mt-4 text-lg text-ink/80">{page.intro}</p>}
+    {page.cover && <img src={assetUrl(page.cover, { width: 1200 })} alt="" class="mt-8 w-full rounded-2xl" />}
+    {page.content && <div class="prose-ohana mt-6" set:html={page.content} />}
+  </article>
+</Base>

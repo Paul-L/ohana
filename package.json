@@ -1,0 +1,21 @@
+{
+  "name": "ohana",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.28.0",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "pnpm --filter web dev",
+    "build": "pnpm --filter web build",
+    "check": "pnpm --filter web check",
+    "cms:up": "docker compose up -d",
+    "cms:down": "docker compose down",
+    "cms:logs": "docker compose logs -f directus",
+    "cms:bootstrap": "node --env-file=.env scripts/bootstrap-directus.ts",
+    "cms:snapshot": "docker compose exec directus npx directus schema snapshot --yes /directus/snapshots/schema.yaml",
+    "cms:apply": "docker compose exec directus npx directus schema apply --yes /directus/snapshots/schema.yaml",
+    "db:backup": "mkdir -p backups && docker compose exec -T postgres pg_dump -U directus -Fc directus > backups/directus-$(date +%Y%m%d-%H%M).dump"
+  }
+}

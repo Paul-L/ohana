@@ -1,0 +1,77 @@
+# PRODUCTION (Coolify, ressource "Docker Compose").
+# Coolify gère le reverse proxy + HTTPS : renseigne les domaines dans l'UI
+# (web -> ohana-lodge.fr, directus -> admin.ohana-lodge.fr) et les variables d'env.
+name: ohana
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: directus
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: directus
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U directus -d directus"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  directus:
+    image: directus/directus:12.6.1
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "8055"
+    volumes:
+      - uploads:/directus/uploads
+      - ./directus/extensions:/directus/extensions
+      - ./directus/snapshots:/directus/snapshots
+    environment:
+      SECRET: ${DIRECTUS_SECRET}
+      PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
+      ADMIN_EMAIL: ${DIRECTUS_ADMIN_EMAIL}
+      ADMIN_PASSWORD: ${DIRECTUS_ADMIN_PASSWORD}
+      DB_CLIENT: pg
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_DATABASE: directus
+      DB_USER: directus
+      DB_PASSWORD: ${POSTGRES_PASSWORD}
+      DEFAULT_LANGUAGE: fr-FR
+      CACHE_ENABLED: "true"
+      CACHE_STORE: memory
+      CACHE_AUTO_PURGE: "true"
+      CONTENT_SECURITY_POLICY_DIRECTIVES__FRAME_SRC: ${SITE_URL}
+      CORS_ENABLED: "true"
+      CORS_ORIGIN: ${SITE_URL}
+      # Protection brute-force sur le login
+      AUTH_LOGIN_ATTEMPTS: "10"
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      - directus
+    expose:
+      - "4321"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 4321
+      # Appel interne au réseau Docker (pas de sortie Internet)
+      DIRECTUS_URL: http://directus:8055
+      DIRECTUS_PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
+      DIRECTUS_WEB_TOKEN: ${DIRECTUS_WEB_TOKEN}
+      RESEND_API_KEY: ${RESEND_API_KEY}
+      MAIL_FROM: ${MAIL_FROM}
+      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
+
+volumes:
+  pgdata:
+  uploads:

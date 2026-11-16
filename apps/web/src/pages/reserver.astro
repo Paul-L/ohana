@@ -1,0 +1,83 @@
+---
+import Base from "@/layouts/Base.astro";
+import { actions, isInputError } from "astro:actions";
+import { PUBLIC_TURNSTILE_SITE_KEY } from "astro:env/server";
+import { directus, readItems, published } from "@/lib/directus";
+
+const result = Astro.getActionResult(actions.bookingRequest);
+const errors = isInputError(result?.error) ? result.error.fields : {};
+const globalError = result?.error && !isInputError(result.error) ? result.error.message : null;
+
+const rooms = await directus.request(readItems("rooms", { filter: published, sort: ["sort", "name"], fields: ["id", "name"] }));
+const preselected = Number(Astro.url.searchParams.get("chambre")) || undefined;
+const today = new Date().toISOString().slice(0, 10);
+
+const field = "mt-1 w-full rounded-lg border border-sand-300 bg-white px-3 py-2";
+---
+
+<Base title="Réserver" description="Demande de réservation directe, sans commission.">
+  <section class="mx-auto max-w-2xl px-4 py-16">
+    <h1 class="text-4xl">Demande de réservation</h1>
+    <p class="mt-3 text-ink/70">Réservation en direct, sans commission. Nous confirmons la disponibilité par email sous 24 h.</p>
+
+    {
+      result?.data?.ok ? (
+        <p class="mt-10 rounded-xl bg-sand-100 p-6" role="status">
+          Merci ! Votre demande a bien été envoyée. Un email de confirmation vient de vous être adressé.
+        </p>
+      ) : (
+        <form method="POST" action={actions.bookingRequest} class="mt-10 grid gap-5">
+          {globalError && <p class="rounded-lg bg-red-50 p-3 text-red-800" role="alert">{globalError}</p>}
+
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label>Arrivée
+              <input type="date" name="arrival" required min={today} class={field} />
+              {errors.arrival && <span class="text-sm text-red-700">{errors.arrival.join(", ")}</span>}
+            </label>
+            <label>Départ
+              <input type="date" name="departure" required min={today} class={field} />
+              {errors.departure && <span class="text-sm text-red-700">{errors.departure.join(", ")}</span>}
+            </label>
+          </div>
+
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label>Chambre
+              <select name="room" class={field}>
+                <option value="">Peu importe</option>
+                {rooms.map((r) => <option value={r.id} selected={r.id === preselected}>{r.name}</option>)}
+              </select>
+            </label>
+            <label>Voyageurs
+              <input type="number" name="guests" min="1" max="20" value="2" required class={field} />
+            </label>
+          </div>
+
+          <label>Nom
+            <input type="text" name="name" required autocomplete="name" class={field} />
+            {errors.name && <span class="text-sm text-red-700">{errors.name.join(", ")}</span>}
+          </label>
+          <div class="grid gap-5 sm:grid-cols-2">
+            <label>Email
+              <input type="email" name="email" required autocomplete="email" class={field} />
+              {errors.email && <span class="text-sm text-red-700">{errors.email.join(", ")}</span>}
+            </label>
+            <label>Téléphone
+              <input type="tel" name="phone" autocomplete="tel" class={field} />
+            </label>
+          </div>
+          <label>Message
+            <textarea name="message" rows="4" class={field}></textarea>
+          </label>
+
+          <!-- Honeypot anti-spam : invisible pour les humains -->
+          <input type="text" name="website" tabindex="-1" autocomplete="off" class="hidden" aria-hidden="true" />
+
+          <div class="cf-turnstile" data-sitekey={PUBLIC_TURNSTILE_SITE_KEY} data-language="fr"></div>
+          <script is:inline src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+
+          <button class="rounded-full bg-ocean px-6 py-3 text-sand-50 hover:bg-ocean-dark">Envoyer la demande</button>
+        </form>
+      )
+    }
+  </section>
+</Base>

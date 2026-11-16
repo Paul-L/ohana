@@ -1,0 +1,18 @@
+---
+// Rendu uniquement quand le site est ouvert dans l'éditeur visuel Directus.
+import { DIRECTUS_PUBLIC_URL } from "astro:env/server";
+---
+
+<visual-editing data-url={DIRECTUS_PUBLIC_URL}></visual-editing>
+
+<script>
+  import { apply } from "@directus/visual-editing";
+
+  class VisualEditing extends HTMLElement {
+    connectedCallback() {
+      // Sans onSaved, la page se recharge après enregistrement : le SSR renvoie le contenu à jour.
+      apply({ directusUrl: this.dataset.url! });
+    }
+  }
+  customElements.define("visual-editing", VisualEditing);
+</script>

@@ -1,0 +1,60 @@
+---
+import Base from "@/layouts/Base.astro";
+import { directus, readItems, assetUrl, published } from "@/lib/directus";
+import { editable } from "@/lib/visual-editing";
+
+const ve = Astro.locals.visualEditing;
+const [room] = await directus.request(
+  readItems("rooms", {
+    filter: { ...published, slug: { _eq: Astro.params.slug! } },
+    fields: ["*", { gallery: ["directus_files_id"] }],
+    limit: 1,
+  }),
+);
+if (!room) return Astro.rewrite("/404");
+
+const gallery = (room.gallery ?? []).map((g) => g.directus_files_id);
+---
+
+<Base title={room.name} description={room.summary} image={room.cover}>
+  <article class="mx-auto max-w-5xl px-4 py-12">
+    {
+      room.cover && (
+        <img
+          src={assetUrl(room.cover, { width: 1600 })}
+          srcset={`${assetUrl(room.cover, { width: 768 })} 768w, ${assetUrl(room.cover, { width: 1600 })} 1600w`}
+          sizes="(min-width: 1024px) 1024px, 100vw"
+          alt={room.name}
+          fetchpriority="high"
+          class="aspect-[16/9] w-full rounded-2xl object-cover"
+          {...editable(ve, "rooms", room.id, ["cover", "gallery"], "drawer")}
+        />
+      )
+    }
+
+    <div class="mt-10 grid gap-10 md:grid-cols-[2fr_1fr]">
+      <div {...editable(ve, "rooms", room.id, ["name", "summary", "description"], "drawer")}>
+        <h1 class="text-4xl">{room.name}</h1>
+        {room.summary && <p class="mt-3 text-lg text-ink/80">{room.summary}</p>}
+        {room.description && <div class="prose-ohana mt-6" set:html={room.description} />}
+      </div>
+      <aside class="h-fit rounded-2xl bg-sand-100 p-6" {...editable(ve, "rooms", room.id, ["capacity", "price_from"])}>
+        {room.capacity && <p>Jusqu'à {room.capacity} personnes</p>}
+        {room.price_from && <p class="mt-1 text-2xl">À partir de {room.price_from} €<span class="text-sm"> / nuit</span></p>}
+        <a href={`/reserver?chambre=${room.id}`} class="mt-5 block rounded-full bg-ocean px-5 py-3 text-center text-sand-50 hover:bg-ocean-dark">
+          Demander une réservation
+        </a>
+      </aside>
+    </div>
+
+    {
+      gallery.length > 0 && (
+        <div class="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
+          {gallery.map((id) => (
+            <img src={assetUrl(id, { width: 600 })} alt="" loading="lazy" decoding="async" class="aspect-square w-full rounded-xl object-cover" />
+          ))}
+        </div>
+      )
+    }
+  </article>
+</Base>

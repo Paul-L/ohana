@@ -1,0 +1,26 @@
+{
+  "name": "web",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "node --env-file=../../.env dist/server/entry.mjs",
+    "check": "astro check",
+    "typegen": "astro sync"
+  },
+  "dependencies": {
+    "@astrojs/node": "11.1.13",
+    "@astrojs/sitemap": "3.7.5",
+    "@directus/sdk": "27.1.0",
+    "@directus/visual-editing": "2.1.0",
+    "astro": "7.4.12",
+    "resend": "6.38.1"
+  },
+  "devDependencies": {
+    "@astrojs/check": "0.9.12",
+    "@tailwindcss/vite": "4.3.5",
+    "tailwindcss": "4.3.5",
+    "typescript": "6"
+  }
+}

@@ -1,0 +1,31 @@
+---
+import { assetUrl, type Room } from "@/lib/directus";
+import { editable } from "@/lib/visual-editing";
+
+interface Props {
+  room: Pick<Room, "id" | "slug" | "name" | "summary" | "cover" | "price_from">;
+}
+const { room } = Astro.props;
+const ve = Astro.locals.visualEditing;
+---
+
+<a href={`/chambres/${room.slug}`} class="group block" {...editable(ve, "rooms", room.id, ["name", "summary", "cover", "price_from"])}>
+  <div class="aspect-[4/3] overflow-hidden rounded-xl bg-sand-100">
+    {
+      room.cover && (
+        <img
+          src={assetUrl(room.cover, { width: 800 })}
+          srcset={`${assetUrl(room.cover, { width: 480 })} 480w, ${assetUrl(room.cover, { width: 800 })} 800w, ${assetUrl(room.cover, { width: 1200 })} 1200w`}
+          sizes="(min-width: 640px) 50vw, 100vw"
+          alt={room.name}
+          loading="lazy"
+          decoding="async"
+          class="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+        />
+      )
+    }
+  </div>
+  <h3 class="mt-3 text-xl">{room.name}</h3>
+  {room.summary && <p class="text-sm text-ink/70">{room.summary}</p>}
+  {room.price_from && <p class="mt-1 text-sm">À partir de {room.price_from} € / nuit</p>}
+</a>

@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.astro/
+.env
+.env.*
+!.env.example
+directus/uploads/*
+!directus/uploads/.gitkeep
+backups/
+.DS_Store
+*.log

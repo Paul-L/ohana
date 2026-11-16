@@ -1,0 +1,89 @@
+---
+import "@/styles/global.css";
+import VisualEditing from "@/components/VisualEditing.astro";
+import { editable } from "@/lib/visual-editing";
+import { assetUrl } from "@/lib/directus";
+
+interface Props {
+  title?: string;
+  description?: string | null;
+  image?: string | null;
+}
+
+const { settings, visualEditing } = Astro.locals;
+const siteName = settings?.site_name ?? "Ohana Lodge";
+const { title, description = settings?.seo_description, image = settings?.hero_image } = Astro.props;
+const fullTitle = title ? `${title} · ${siteName}` : siteName;
+const canonical = new URL(Astro.url.pathname, Astro.site);
+const ogImage = assetUrl(image, { width: 1200, height: 630, format: "webp" });
+
+// Données structurées : aide Google ET les moteurs IA (GEO) à comprendre l'activité
+const jsonLd = {
+  "@context": "https://schema.org",
+  "@type": "BedAndBreakfast",
+  name: siteName,
+  description: settings?.seo_description ?? undefined,
+  url: Astro.site?.toString(),
+  email: settings?.contact_email ?? undefined,
+  telephone: settings?.phone ?? undefined,
+  address: settings?.address ?? undefined,
+  image: ogImage,
+};
+
+const nav = [
+  { href: "/", label: "Accueil" },
+  { href: "/chambres", label: "Chambres" },
+  { href: "/reserver", label: "Réserver" },
+];
+---
+
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{fullTitle}</title>
+    {description && <meta name="description" content={description} />}
+    <link rel="canonical" href={canonical} />
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={fullTitle} />
+    {description && <meta property="og:description" content={description} />}
+    {ogImage && <meta property="og:image" content={ogImage} />}
+    <link rel="sitemap" href="/sitemap-index.xml" />
+    <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    {visualEditing && <meta name="robots" content="noindex" />}
+  </head>
+  <body class="min-h-dvh flex flex-col">
+    <header class="sticky top-0 z-10 bg-sand-50/90 backdrop-blur border-b border-sand-300">
+      <div class="mx-auto max-w-5xl px-4 h-16 flex items-center justify-between">
+        <a href="/" class="font-serif text-xl" {...settings && editable(visualEditing, "settings", settings.id, "site_name")}>
+          {siteName}
+        </a>
+        <nav class="flex gap-5 text-sm">
+          {nav.map((l) => (
+            <a href={l.href} class:list={["hover:text-ocean", Astro.url.pathname === l.href && "text-ocean font-medium"]}>
+              {l.label}
+            </a>
+          ))}
+        </nav>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      <slot />
+    </main>
+
+    <footer class="border-t border-sand-300 text-sm">
+      <div
+        class="mx-auto max-w-5xl px-4 py-8 grid gap-2 sm:grid-cols-3"
+        {...settings && editable(visualEditing, "settings", settings.id, ["address", "phone", "contact_email"], "drawer")}
+      >
+        <p>{settings?.address}</p>
+        {settings?.phone && <a href={`tel:${settings.phone.replace(/\s/g, "")}`}>{settings.phone}</a>}
+        {settings?.contact_email && <a href={`mailto:${settings.contact_email}`}>{settings.contact_email}</a>}
+      </div>
+    </footer>
+
+    {visualEditing && <VisualEditing />}
+  </body>
+</html>
