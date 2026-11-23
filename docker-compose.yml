@@ -52,6 +52,12 @@ services:
       CORS_ORIGIN: ${SITE_URL}
       # Transformations d'images (miniatures, webp/avif) côté Directus
       ASSETS_TRANSFORM_IMAGE_MAX_DIMENSION: "4000"
+      # Module « Connexions » (extension ohana-connexions) : applications OAuth Google et Instagram
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
+      EXTENSIONS_AUTO_RELOAD: "true"
 
 volumes:
   pgdata:

@@ -131,7 +131,7 @@ export interface RoomFile {
   directus_files_id: string;
 }
 
-/** Avis Google synchronisés chaque nuit (apps/web/scripts/sync-reviews.ts). Ne jamais modifier le texte (règles Google). */
+/** Avis Google synchronisés chaque nuit (extension ohana-connexions). Ne jamais modifier le texte (règles Google). */
 export interface Review {
   id: number;
   visible: boolean;
@@ -144,7 +144,7 @@ export interface Review {
   synced_at: "datetime";
 }
 
-/** Photos Instagram importées chaque semaine (scripts/sync-instagram.ts) : remplacent la galerie de l'accueil. */
+/** Photos Instagram importées chaque semaine (extension ohana-connexions) : remplacent la galerie de l'accueil. */
 export interface InstagramPost {
   id: number;
   visible: boolean;

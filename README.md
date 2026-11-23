@@ -26,7 +26,8 @@ apps/web/                 Site Astro
   src/components/EllohaWidget.astro  Barre de réservation Elloha (widget officiel, habillé à notre charte)
   src/pages/              accueil, chambres, [slug] (pages libres)
 directus/
-  extensions/             Extensions Directus (versionnées)
+  extensions/             Extensions Directus (versionnées, dist/ compris)
+    ohana-connexions/     Module « Connexions » : OAuth Google/Instagram + synchros planifiées
   snapshots/              Snapshot du schéma (pnpm cms:snapshot)
   uploads/                Fichiers (ignorés par git)
 scripts/bootstrap-directus.ts  Schéma + permissions, idempotent
@@ -59,9 +60,7 @@ Rôles : **Propriétaire** (contenu, pas de réglages techniques), **Site web** 
 | `pnpm cms:bootstrap` | (Re)applique schéma + permissions |
 | `pnpm cms:snapshot` / `cms:apply` | Exporte / applique le schéma Directus (YAML versionné) |
 | `pnpm db:backup` | Dump Postgres dans `backups/` |
-| `pnpm reviews:sync` | Synchronise les avis Google (lancé chaque nuit en production) |
-| `pnpm google:auth` | Autorisation unique de l'accès aux avis Google |
-| `pnpm instagram:sync` | Importe les dernières photos Instagram (lancé chaque semaine en production) |
+| `pnpm ext:build` | Compile l'extension Directus `ohana-connexions` (committer `dist/`) |
 
 ## Déploiement (Coolify)
 
@@ -82,8 +81,8 @@ Les disponibilités, prix et couleurs du moteur lui-même se règlent dans le ba
 
 ## Notes et avis
 
-- **Google** : note, nombre d'avis et 50 derniers avis importés chaque nuit par `scripts/sync-reviews.ts`
-  (Business Profile API, accès propriétaire). Le site affiche les 6 plus récents notés 4 ou 5 étoiles.
+- **Google** : note, nombre d'avis et 50 derniers avis importés chaque nuit (Business Profile API). Le site affiche
+  les 6 plus récents notés 4 ou 5 étoiles.
 - **Booking et Tripadvisor** : notes saisies à la main dans Directus (Accueil › Avis), avec la date du relevé
   (« Notes Booking/Tripadvisor relevées le »). Leurs pages refusent la lecture automatique et l'API Tripadvisor
   interdit de stocker ou de trier ses avis.
@@ -91,48 +90,69 @@ Les disponibilités, prix et couleurs du moteur lui-même se règlent dans le ba
   les plus anciens si la synchro s'arrête), texte jamais modifié. Mention légale sous les avis (Code de la consommation,
   art. L111-7-2) : critères de sélection et absence de vérification.
 
-### Mise en place de la synchro Google (une fois)
-
-1. Prérequis Google : fiche de l'établissement validée depuis plus de 60 jours, avec le site renseigné.
-2. [Google Cloud](https://console.cloud.google.com) : créer un projet et noter son **numéro**.
-3. Demander l'accès : [formulaire Business Profile API](https://support.google.com/business/contact/api_default) ›
-   « Application for Basic API Access », avec le numéro de projet et l'e-mail propriétaire de la fiche.
-   Accès accordé quand le quota de « Google My Business API » passe de 0 à 300 requêtes/minute.
-4. Activer les API : Google My Business API, My Business Account Management API, My Business Business Information API.
-5. Écran de consentement OAuth : type « Externe », ajouter le scope `https://www.googleapis.com/auth/business.manage`,
-   puis **publier l'application (« En production »)** : en mode test, l'autorisation expire au bout de 7 jours.
-6. Identifiants › ID client OAuth › « Application de bureau » → `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` dans `.env`.
-7. `pnpm google:auth` : la propriétaire se connecte avec le compte qui gère la fiche (Google signale une application
-   non validée : « Paramètres avancés › Continuer »). Reporter `GOOGLE_REFRESH_TOKEN` et `GOOGLE_LOCATION` dans `.env`.
-8. `DIRECTUS_SYNC_TOKEN` (`openssl rand -hex 32`) dans `.env`, puis `pnpm cms:bootstrap` (crée l'utilisateur « Synchro avis »).
-9. Tester : `pnpm reviews:sync`.
-10. Production : reporter les 5 variables dans Coolify, relancer le bootstrap contre la prod, puis ajouter une
-    **tâche planifiée** sur le service `web` : commande `node scripts/sync-reviews.ts`, fréquence `0 4 * * *`.
-11. Dans Directus (Accueil › Avis › Notes › Google), renseigner le lien vers les avis Google de la fiche.
-
 ## Photos Instagram
 
-`scripts/sync-instagram.ts` importe chaque semaine les 12 dernières publications du compte (photos, 1re image des
-carrousels, couverture des vidéos) dans la médiathèque Directus (dossier « Instagram »). Les plus anciennes sont
-retirées avec leur image : la galerie « Le lieu en images » de l'accueil affiche les 5 plus récentes, chacune liée à
-sa publication. Moins de 5 photos disponibles → la galerie saisie à la main dans Accueil › Galerie reprend sa place.
-La propriétaire peut masquer une photo (Contenu du site › Photos Instagram › « Afficher ») et donner un texte
-alternatif à chaque image (description dans la médiathèque). Le lien « Suivre sur Instagram » est rempli
-automatiquement s'il est vide (Réglages › Coordonnées).
+Les 12 dernières publications du compte (photos, 1re image des carrousels, couverture des vidéos) sont importées
+chaque lundi dans la médiathèque Directus (dossier « Instagram ») ; les plus anciennes sont retirées avec leur image.
+La galerie « Le lieu en images » de l'accueil affiche les 5 plus récentes, chacune liée à sa publication. Moins de
+5 photos → la galerie saisie à la main (Accueil › Galerie) reprend sa place. La propriétaire peut masquer une photo
+(Contenu du site › Photos Instagram › « Afficher ») et donner un texte alternatif (description dans la médiathèque).
+Le lien « Suivre sur Instagram » est rempli automatiquement s'il est vide (Réglages › Coordonnées).
 
-### Mise en place (une fois)
+## Connexions Google et Instagram
 
-1. Compte Instagram du lodge en **compte professionnel** (Instagram › Paramètres › Type de compte, gratuit).
-2. [Meta for Developers](https://developers.facebook.com/apps) : créer une app, cas d'usage
-   « Gérer les messages et le contenu sur Instagram » (API Instagram avec connexion Instagram).
-3. Rôles de l'app › ajouter le compte Instagram comme **testeur Instagram**, puis accepter l'invitation depuis
-   Instagram (Paramètres › Apps et sites web › Invitations). L'app peut rester en mode développement : elle ne lit
-   que ce compte, pas besoin d'examen par Meta.
-4. Configuration de l'API › « Générer des jetons d'accès » : ajouter le compte, générer le jeton (permission
-   `instagram_business_basic`) → `INSTAGRAM_TOKEN` dans `.env` et dans Coolify.
-5. `pnpm cms:bootstrap` (avec `DIRECTUS_SYNC_TOKEN`, partagé avec la synchro des avis), puis tester : `pnpm instagram:sync`.
-6. Production : **tâche planifiée** sur le service `web` : commande `node scripts/sync-instagram.ts`, fréquence `0 5 * * 1`
-   (lundi 5 h).
+Module **Connexions** du back-office (extension `directus/extensions/ohana-connexions`) : la propriétaire clique sur
+« Connecter Google » / « Connecter Instagram », se connecte avec le compte du lodge, et c'est fini. Le module affiche
+l'état et la dernière synchro, avec « Synchroniser maintenant », « Reconnecter » et « Déconnecter ».
+Les synchros tournent dans Directus (heure UTC) : avis Google chaque nuit à 3 h, photos Instagram le lundi à 4 h.
+Les accès sont gardés dans les collections masquées `google_auth` / `instagram_auth`, sans aucune permission :
+seule l'extension les lit (ni le site ni la propriétaire).
 
-Le jeton dure 60 jours ; chaque passage le renouvelle et le garde dans Directus (collection masquée `instagram_auth`).
-Si la synchro s'arrête plus de 60 jours, générer un nouveau jeton (étape 4).
+Seul le développeur crée, une fois, les deux applications OAuth ; leurs identifiants vont dans les variables
+du service **directus** (Coolify et `.env`), puis redéployer.
+
+### Application Google (une fois)
+
+1. Prérequis : fiche de l'établissement validée depuis plus de 60 jours, avec le site renseigné.
+2. [Google Cloud](https://console.cloud.google.com) : créer un projet, noter son **numéro**.
+3. Demander l'accès : [formulaire Business Profile API](https://support.google.com/business/contact/api_default) ›
+   « Application for Basic API Access » (numéro de projet, e-mail du compte qui gère la fiche). Accordé quand le quota
+   de « Google My Business API » passe de 0 à 300 requêtes/minute (API et services › Quotas). Quelques jours.
+4. API et services › Bibliothèque : activer Google My Business API, My Business Account Management API,
+   My Business Business Information API.
+5. Écran de consentement OAuth (Google Auth Platform) : type « Externe », scope
+   `https://www.googleapis.com/auth/business.manage`, puis **publier l'application (« En production »)** : en mode
+   test, l'accès expire au bout de 7 jours. Google affichera « application non validée » à la connexion :
+   « Paramètres avancés › Continuer ».
+6. Identifiants › ID client OAuth › **Application Web**, URI de redirection autorisés :
+   `https://admin.ohanalodge.com/connexions/google/callback` (et `http://localhost:8055/connexions/google/callback`
+   pour le dev) → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
+
+### Application Instagram (une fois)
+
+1. Compte Instagram du lodge en **compte professionnel** (Paramètres › Type de compte, gratuit).
+2. [Meta for Developers](https://developers.facebook.com/apps) › Créer une app › cas d'usage « Gérer les messages et
+   le contenu sur Instagram ».
+3. Configuration de l'API avec connexion Instagram › « Configurer la connexion professionnelle Instagram » :
+   URI de redirection OAuth `https://admin.ohanalodge.com/connexions/instagram/callback` (Instagram exige https).
+   Reporter l'**ID de l'app Instagram** et sa **clé secrète** (pas ceux de l'app Facebook) → `INSTAGRAM_APP_ID`,
+   `INSTAGRAM_APP_SECRET`.
+4. Tant que l'app est en mode développement, seuls ses testeurs peuvent se connecter : Rôles de l'app › ajouter le
+   compte Instagram du lodge comme **testeur Instagram**, à accepter dans Instagram (Paramètres › Apps et sites web ›
+   Invitations). Pour s'en passer : passer l'app en mode Live après examen par Meta de `instagram_business_basic`.
+
+Le jeton Instagram dure 60 jours et est prolongé à chaque synchro hebdomadaire. Si l'accès expire ou est révoqué,
+le module l'indique : « Reconnecter ».
+
+### Mise en service
+
+1. Variables du service `directus` : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` ; redéployer.
+2. `DIRECTUS_PUBLIC_URL=https://admin… pnpm cms:bootstrap` (collections, module dans la barre de gauche).
+3. La propriétaire ouvre **Connexions** dans Directus et clique sur les deux boutons.
+4. Directus › Accueil › Avis › Notes › Google : renseigner le lien vers les avis Google de la fiche.
+
+### Modifier l'extension
+
+Sources dans `src/` (`google.ts`, `instagram.ts`, `endpoint.ts`, `hook.ts`, `module/`). `pnpm ext:build` puis
+committer `dist/` : la production charge `dist/` tel quel (pas de build côté serveur). En dev, Directus recharge
+l'extension automatiquement (`EXTENSIONS_AUTO_RELOAD`).

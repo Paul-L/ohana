@@ -1,5 +1,6 @@
 node_modules/
 dist/
+!directus/extensions/*/dist/
 .astro/
 .env
 .env.*

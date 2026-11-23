@@ -25,8 +25,6 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=4321
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/apps/web/node_modules ./node_modules
 COPY --from=build /app/apps/web/dist ./dist
-# Synchros planifiées Coolify : avis Google (node scripts/sync-reviews.ts), photos Instagram (node scripts/sync-instagram.ts)
-COPY scripts/sync-reviews.ts scripts/sync-instagram.ts ./scripts/
 USER node
 EXPOSE 4321
 CMD ["node", "dist/server/entry.mjs"]

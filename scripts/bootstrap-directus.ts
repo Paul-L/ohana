@@ -13,7 +13,6 @@ const ADMIN_EMAIL = must("DIRECTUS_ADMIN_EMAIL");
 const ADMIN_PASSWORD = must("DIRECTUS_ADMIN_PASSWORD");
 const WEB_TOKEN = must("DIRECTUS_WEB_TOKEN");
 // Token de l'utilisateur technique qui synchronise les avis Google (facultatif : sans lui, pas de synchro)
-const SYNC_TOKEN = process.env.DIRECTUS_SYNC_TOKEN || null;
 
 function must(name: string): string {
   const v = process.env[name];
@@ -358,7 +357,7 @@ async function schema() {
     f.string("access_eyebrow"),
   ]) await ensureField("home", field);
 
-  // --- Avis Google synchronisés chaque nuit (apps/web/scripts/sync-reviews.ts) ---
+  // --- Avis Google synchronisés chaque nuit (extension ohana-connexions) ---
   const ro = (field: Field): Field => ({ ...field, meta: { ...field.meta, readonly: true } });
   for (const field of [
     ro({ field: "ratings_synced_at", type: "timestamp", meta: { interface: "datetime", width: "half", note: "Note Google mise à jour automatiquement chaque nuit" } }),
@@ -387,7 +386,7 @@ async function schema() {
     ],
   );
 
-  // --- Photos Instagram importées chaque semaine (scripts/sync-instagram.ts) ---
+  // --- Photos Instagram importées chaque semaine (extension ohana-connexions) ---
   await ensureCollection(
     "instagram_posts",
     {
@@ -410,11 +409,28 @@ async function schema() {
   );
   await fileRelation("instagram_posts", "image");
 
-  // Jeton Instagram renouvelé par la synchro : invisible dans le back-office, lisible seulement par la synchro
+  // Accès Google / Instagram (module « Connexions », extension ohana-connexions) : collections masquées,
+  // sans aucune permission → lisibles seulement par l'extension, jamais par le site ni la propriétaire
+  const lastSync: Field[] = [
+    { field: "last_sync_at", type: "timestamp", meta: { interface: "datetime", readonly: true } },
+    { field: "last_sync_ok", type: "boolean", meta: { interface: "boolean", readonly: true } },
+    { field: "last_sync_message", type: "text", meta: { interface: "input-multiline", readonly: true } },
+  ];
   await ensureCollection("instagram_auth", { singleton: true, hidden: true, icon: "key" }, [
     f.id(),
     { field: "token", type: "text", meta: { interface: "input", hidden: true } },
     { field: "expires_at", type: "timestamp", meta: { interface: "datetime", readonly: true } },
+    { field: "username", type: "string", meta: { interface: "input", readonly: true } },
+    ...lastSync,
+  ]);
+  await ensureCollection("google_auth", { singleton: true, hidden: true, icon: "key" }, [
+    f.id(),
+    { field: "refresh_token", type: "text", meta: { interface: "input", hidden: true } },
+    { field: "email", type: "string", meta: { interface: "input", readonly: true } },
+    { field: "location", type: "string", meta: { interface: "input", readonly: true } },
+    { field: "location_title", type: "string", meta: { interface: "input", readonly: true } },
+    { field: "locations", type: "json", meta: { interface: "input-code", special: ["cast-json"], readonly: true } },
+    ...lastSync,
   ]);
   const folders = await api<{ id: string }[]>("GET", "/folders?filter[name][_eq]=Instagram&fields=id");
   if (!folders.length) {
@@ -611,33 +627,6 @@ async function access() {
     { collection: "directus_folders", action: "read" },
   ]);
   await ensureRole("Propriétaire", ownerPolicy, "home");
-
-  // Synchros planifiées (avis Google chaque nuit, photos Instagram chaque semaine) : rien d'autre
-  const syncPolicy = await ensurePolicy("Synchro avis", { icon: "sync", app_access: false, admin_access: false }, [
-    ...crud("reviews"),
-    { collection: "home", action: "read" },
-    { collection: "home", action: "update" },
-    ...crud("instagram_posts"),
-    ...crud("instagram_auth"),
-    { collection: "settings", action: "read" },
-    { collection: "settings", action: "update" },
-    { collection: "directus_files", action: "create" },
-    { collection: "directus_files", action: "read" },
-    { collection: "directus_files", action: "delete" },
-    { collection: "directus_folders", action: "read" },
-  ]);
-  const syncRole = await ensureRole("Synchro avis", syncPolicy, "sync");
-  if (SYNC_TOKEN) {
-    const [syncUser] = await api<{ id: string }[]>("GET", "/users?filter[email][_eq]=synchro-avis@example.org&fields=id");
-    if (!syncUser) {
-      await api("POST", "/users", { first_name: "Synchro avis", email: "synchro-avis@example.org", role: syncRole, token: SYNC_TOKEN, status: "active" });
-      console.log("+ utilisateur technique synchro-avis");
-    } else {
-      await api("PATCH", `/users/${syncUser.id}`, { token: SYNC_TOKEN });
-    }
-  } else {
-    console.log("· DIRECTUS_SYNC_TOKEN absent : utilisateur de synchro des avis non créé");
-  }
 }
 
 // ---------------------------------------------------------------- Réglages Directus
@@ -654,6 +643,7 @@ async function projectSettings() {
       { type: "module", id: "files", enabled: true },
       { type: "module", id: "users", enabled: true },
       { type: "module", id: "insights", enabled: false },
+      { type: "module", id: "connexions", enabled: true },
       { type: "module", id: "flows", enabled: true },
       { type: "module", id: "deployments", enabled: false },
       { type: "module", id: "settings", enabled: true, locked: true },

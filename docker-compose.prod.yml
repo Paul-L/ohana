@@ -53,6 +53,11 @@ services:
       ASSETS_TRANSFORM_IMAGE_MAX_DIMENSION: "4000"
       # Protection brute-force sur le login
       AUTH_LOGIN_ATTEMPTS: "10"
+      # Module « Connexions » (extension ohana-connexions) : applications OAuth Google et Instagram
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      INSTAGRAM_APP_ID: ${INSTAGRAM_APP_ID:-}
+      INSTAGRAM_APP_SECRET: ${INSTAGRAM_APP_SECRET:-}
 
   web:
     build:
@@ -74,14 +79,6 @@ services:
       DIRECTUS_URL: http://directus:8055
       DIRECTUS_PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
       DIRECTUS_WEB_TOKEN: ${DIRECTUS_WEB_TOKEN}
-      # Synchro des avis Google (tâche planifiée : node scripts/sync-reviews.ts)
-      DIRECTUS_SYNC_TOKEN: ${DIRECTUS_SYNC_TOKEN}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
-      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
-      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN}
-      GOOGLE_LOCATION: ${GOOGLE_LOCATION}
-      # Synchro des photos Instagram (tâche planifiée : node scripts/sync-instagram.ts)
-      INSTAGRAM_TOKEN: ${INSTAGRAM_TOKEN:-}
 
 volumes:
   pgdata:
