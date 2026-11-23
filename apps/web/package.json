@@ -14,7 +14,8 @@
     "@astrojs/sitemap": "3.7.5",
     "@directus/sdk": "27.1.0",
     "@directus/visual-editing": "2.1.0",
-    "astro": "7.4.12"
+    "astro": "7.4.12",
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@astrojs/check": "0.9.12",
