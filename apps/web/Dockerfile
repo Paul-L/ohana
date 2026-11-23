@@ -8,6 +8,10 @@ COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/
 RUN pnpm install --frozen-lockfile --filter web
 COPY apps/web apps/web
+# Variables astro:env « public » : figées dans le bundle AU BUILD (pas lues au runtime).
+# Les secrets (access: "secret") restent lus au démarrage du conteneur.
+ARG DIRECTUS_PUBLIC_URL
+ARG PUBLIC_TURNSTILE_SITE_KEY
 RUN pnpm --filter web build
 
 FROM base AS deps

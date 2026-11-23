@@ -61,8 +61,8 @@ Rôles : **Propriétaire** (contenu + demandes, pas de réglages techniques), **
 ## Déploiement (Coolify)
 
 1. Nouvelle ressource **Docker Compose** → ce repo, fichier `docker-compose.prod.yml`.
-2. Domaines : `web` → `ohana-lodge.fr` (port 4321), `directus` → `admin.ohana-lodge.fr` (port 8055).
-3. Variables : celles de `.env.example` avec `DIRECTUS_PUBLIC_URL=https://admin…`, `SITE_URL=https://ohana-lodge.fr`.
+2. Domaines : `web` → `ohanalodge.com` (port 4321), `directus` → `admin.ohanalodge.com` (port 8055).
+3. Variables : celles de `.env.example` avec `DIRECTUS_PUBLIC_URL=https://admin…`, `SITE_URL=https://ohanalodge.com`.
 4. Premier déploiement, puis en local : `DIRECTUS_PUBLIC_URL=https://admin… pnpm cms:bootstrap`.
 5. Créer l'utilisateur de la propriétaire (rôle **Propriétaire**) dans Directus.
 6. Sauvegardes : activer les backups Postgres planifiés de Coolify + le volume `uploads`.

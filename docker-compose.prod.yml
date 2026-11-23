@@ -1,6 +1,6 @@
 # PRODUCTION (Coolify, ressource "Docker Compose").
 # Coolify gère le reverse proxy + HTTPS : renseigne les domaines dans l'UI
-# (web -> ohana-lodge.fr, directus -> admin.ohana-lodge.fr) et les variables d'env.
+# (web -> ohanalodge.com, directus -> admin.ohanalodge.com) et les variables d'env.
 name: ohana
 
 services:
@@ -49,6 +49,8 @@ services:
       CONTENT_SECURITY_POLICY_DIRECTIVES__FRAME_SRC: ${SITE_URL}
       CORS_ENABLED: "true"
       CORS_ORIGIN: ${SITE_URL}
+      # Transformations d'images (miniatures, webp/avif) côté Directus
+      ASSETS_TRANSFORM_IMAGE_MAX_DIMENSION: "4000"
       # Protection brute-force sur le login
       AUTH_LOGIN_ATTEMPTS: "10"
 
@@ -56,6 +58,10 @@ services:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
+      # Variables publiques astro:env, figées au build
+      args:
+        DIRECTUS_PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
+        PUBLIC_TURNSTILE_SITE_KEY: ${PUBLIC_TURNSTILE_SITE_KEY}
     restart: unless-stopped
     depends_on:
       - directus
@@ -70,7 +76,12 @@ services:
       DIRECTUS_WEB_TOKEN: ${DIRECTUS_WEB_TOKEN}
       RESEND_API_KEY: ${RESEND_API_KEY}
       MAIL_FROM: ${MAIL_FROM}
+      PUBLIC_TURNSTILE_SITE_KEY: ${PUBLIC_TURNSTILE_SITE_KEY}
       TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
+      # Elloha : vides = /reserver reste en mode « demande »
+      ELLOHA_CLIENT_ID: ${ELLOHA_CLIENT_ID}
+      ELLOHA_BOOKING_ENGINE_ID: ${ELLOHA_BOOKING_ENGINE_ID}
+      ELLOHA_PRODUCT_ID: ${ELLOHA_PRODUCT_ID}
 
 volumes:
   pgdata:

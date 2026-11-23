@@ -5,8 +5,8 @@ import sitemap from "@astrojs/sitemap";
 import tailwindcss from "@tailwindcss/vite";
 
 export default defineConfig({
-  // À remplacer par le domaine définitif (sert au sitemap et aux URL canoniques)
-  site: "https://ohana-lodge.fr",
+  // Domaine de production (sert au sitemap et aux URL canoniques)
+  site: "https://ohanalodge.com",
 
   // Rendu serveur : le contenu Directus est à jour dès l'enregistrement,
   // indispensable pour l'éditeur visuel. Les pages fixent leur propre Cache-Control.
