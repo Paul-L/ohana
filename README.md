@@ -102,16 +102,21 @@ Le lien « Suivre sur Instagram » est rempli automatiquement s'il est vide (Ré
 ## Connexions Google et Instagram
 
 Module **Connexions** du back-office (extension `directus/extensions/ohana-connexions`) : la propriétaire clique sur
-« Connecter Google » / « Connecter Instagram », se connecte avec le compte du lodge, et c'est fini. Le module affiche
+« Connecter Google » et se connecte avec le compte qui gère la fiche ; pour Instagram, elle colle l'adresse d'un flux
+Behold (ou, option, « Connecter via Instagram » si une app Meta est configurée). Le module affiche
 l'état et la dernière synchro, avec « Synchroniser maintenant », « Reconnecter » et « Déconnecter ».
 Les synchros tournent dans Directus (heure UTC) : avis Google chaque nuit à 3 h, photos Instagram le lundi à 4 h.
 Les accès sont gardés dans les collections masquées `google_auth` / `instagram_auth`, sans aucune permission :
 seule l'extension les lit (ni le site ni la propriétaire).
 
-Seul le développeur crée, une fois, les deux applications OAuth ; leurs identifiants vont dans les variables
+Seul le développeur crée, une fois, l'application OAuth Google ; ses identifiants vont dans les variables
 du service **directus** (Coolify et `.env`), puis redéployer.
 
 ### Application Google (une fois)
+
+Déjà créée : projet Google Cloud « Ohana Lodge » (n° 93374596090, compte loustaunaupaul@gmail.com), application
+OAuth publiée « En production », client « Directus Connexions ». Reste la demande d'accès (étape 3), à envoyer depuis
+un compte qui gère la fiche. Étapes complètes, pour mémoire :
 
 1. Prérequis : fiche de l'établissement validée depuis plus de 60 jours, avec le site renseigné.
 2. [Google Cloud](https://console.cloud.google.com) : créer un projet, noter son **numéro**.
@@ -128,27 +133,29 @@ du service **directus** (Coolify et `.env`), puis redéployer.
    `https://admin.ohanalodge.com/connexions/google/callback` (et `http://localhost:8055/connexions/google/callback`
    pour le dev) → `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`.
 
-### Application Instagram (une fois)
+### Instagram via Behold (recommandé, aucune app Meta)
 
-1. Compte Instagram du lodge en **compte professionnel** (Paramètres › Type de compte, gratuit).
-2. [Meta for Developers](https://developers.facebook.com/apps) › Créer une app › cas d'usage « Gérer les messages et
-   le contenu sur Instagram ».
-3. Configuration de l'API avec connexion Instagram › « Configurer la connexion professionnelle Instagram » :
-   URI de redirection OAuth `https://admin.ohanalodge.com/connexions/instagram/callback` (Instagram exige https).
-   Reporter l'**ID de l'app Instagram** et sa **clé secrète** (pas ceux de l'app Facebook) → `INSTAGRAM_APP_ID`,
-   `INSTAGRAM_APP_SECRET`.
-4. Tant que l'app est en mode développement, seuls ses testeurs peuvent se connecter : Rôles de l'app › ajouter le
-   compte Instagram du lodge comme **testeur Instagram**, à accepter dans Instagram (Paramètres › Apps et sites web ›
-   Invitations). Pour s'en passer : passer l'app en mode Live après examen par Meta de `instagram_business_basic`.
+1. Compte Instagram du lodge en **compte professionnel** (Paramètres › Type de compte, gratuit) : Behold n'accepte
+   que les comptes Entreprise ou Créateur.
+2. [behold.so](https://behold.so) : créer un compte (offre gratuite : 1 flux, 6 publications, mise à jour quotidienne,
+   1 200 lectures/mois ; la synchro en consomme ~5), connecter le compte Instagram, créer un flux **JSON**.
+3. Directus › **Connexions** › Photos Instagram : coller l'adresse `https://feeds.behold.so/…` › Enregistrer.
 
-Le jeton Instagram dure 60 jours et est prolongé à chaque synchro hebdomadaire. Si l'accès expire ou est révoqué,
-le module l'indique : « Reconnecter ».
+Les images sont recopiées dans la médiathèque Directus : le site ne dépend pas de Behold pour les afficher.
+
+### Instagram via l'API officielle (option, si une app Meta existe)
+
+Nécessite un compte Facebook et un compte Meta for Developers. App avec le cas d'usage « Gérer les messages et le
+contenu sur Instagram », URI de redirection `https://admin.ohanalodge.com/connexions/instagram/callback`,
+**ID et clé secrète de l'app Instagram** → `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` (service `directus`). En mode
+développement, ajouter le compte Instagram comme testeur. Le module affiche alors « Connecter via Instagram » ; le
+jeton (60 jours) est prolongé à chaque synchro.
 
 ### Mise en service
 
-1. Variables du service `directus` : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `INSTAGRAM_APP_ID`, `INSTAGRAM_APP_SECRET` ; redéployer.
+1. Variables du service `directus` : `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` (et `INSTAGRAM_APP_*` seulement pour l'option API) ; redéployer.
 2. `DIRECTUS_PUBLIC_URL=https://admin… pnpm cms:bootstrap` (collections, module dans la barre de gauche).
-3. La propriétaire ouvre **Connexions** dans Directus et clique sur les deux boutons.
+3. Dans Directus › **Connexions** : « Connecter Google » (compte qui gère la fiche) et l'adresse du flux Behold.
 4. Directus › Accueil › Avis › Notes › Google : renseigner le lien vers les avis Google de la fiche.
 
 ### Modifier l'extension

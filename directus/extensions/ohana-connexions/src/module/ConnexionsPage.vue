@@ -64,28 +64,37 @@
             </div>
           </header>
 
-          <v-notice v-if="!status.instagram.configured" type="warning">
-            Application Instagram non configurée sur le serveur (identifiants à renseigner par le développeur, voir README).
-          </v-notice>
+          <p v-if="status.instagram.connected && status.instagram.source === 'behold'" class="detail">
+            Photos lues via Behold (flux mis à jour chaque jour par Behold).
+          </p>
+          <p v-if="status.instagram.connected && status.instagram.source === 'api' && status.instagram.expiresAt" class="detail">
+            Accès valable jusqu'au {{ date(status.instagram.expiresAt) }}, prolongé automatiquement à chaque synchro.
+          </p>
 
-          <template v-else>
-            <p v-if="status.instagram.connected && status.instagram.expiresAt" class="detail">
-              Accès valable jusqu'au {{ date(status.instagram.expiresAt) }}, prolongé automatiquement à chaque synchro.
+          <div v-if="!status.instagram.connected || editingFeed" class="field">
+            <p class="label">
+              Adresse du flux Behold : créez un compte gratuit sur
+              <a href="https://behold.so" target="_blank" rel="noopener">behold.so</a>, connectez le compte Instagram
+              (professionnel) du lodge, créez un flux « JSON » puis copiez son adresse ici.
             </p>
-            <p v-if="!status.instagram.connected" class="detail">Le compte Instagram doit être un compte professionnel (Entreprise ou Créateur).</p>
-
-            <last-sync :sync="status.instagram.lastSync" />
-
-            <div class="actions">
-              <v-button :loading="busy === 'instagram-start'" :secondary="status.instagram.connected" @click="connect('instagram')">
-                {{ status.instagram.connected ? "Reconnecter" : "Connecter Instagram" }}
-              </v-button>
-              <template v-if="status.instagram.connected">
-                <v-button secondary :loading="busy === 'instagram-sync'" @click="sync('instagram')">Synchroniser maintenant</v-button>
-                <v-button secondary kind="danger" :loading="busy === 'instagram-disconnect'" @click="disconnect('instagram')">Déconnecter</v-button>
-              </template>
+            <div class="feed">
+              <v-input v-model="feedUrl" placeholder="https://feeds.behold.so/…" />
+              <v-button :loading="busy === 'instagram-feed'" :disabled="!feedUrl" @click="saveFeed">Enregistrer</v-button>
             </div>
-          </template>
+          </div>
+
+          <last-sync :sync="status.instagram.lastSync" />
+
+          <div class="actions">
+            <v-button v-if="status.instagram.configured" :loading="busy === 'instagram-start'" secondary @click="connect('instagram')">
+              {{ status.instagram.source === "api" ? "Reconnecter" : "Connecter via Instagram" }}
+            </v-button>
+            <v-button v-if="status.instagram.source === 'behold' && !editingFeed" secondary @click="editFeed">Changer de flux</v-button>
+            <template v-if="status.instagram.connected">
+              <v-button secondary :loading="busy === 'instagram-sync'" @click="sync('instagram')">Synchroniser maintenant</v-button>
+              <v-button secondary kind="danger" :loading="busy === 'instagram-disconnect'" @click="disconnect('instagram')">Déconnecter</v-button>
+            </template>
+          </div>
         </section>
       </template>
     </div>
@@ -101,7 +110,7 @@ type Provider = "google" | "instagram";
 type Sync = { at: string; ok: boolean; message: string } | null;
 interface Status {
   google: { configured: boolean; connected: boolean; email: string | null; location: string | null; locationTitle: string | null; locations: { name: string; title: string }[]; lastSync: Sync };
-  instagram: { configured: boolean; connected: boolean; username: string | null; expiresAt: string | null; lastSync: Sync };
+  instagram: { configured: boolean; connected: boolean; source: "behold" | "api" | null; feedUrl: string | null; username: string | null; expiresAt: string | null; lastSync: Sync };
 }
 
 const api = useApi();
@@ -110,6 +119,8 @@ const router = useRouter();
 const status = ref<Status | null>(null);
 const busy = ref<string | null>(null);
 const flash = ref<{ type: "success" | "danger"; text: string } | null>(null);
+const feedUrl = ref("");
+const editingFeed = ref(false);
 const names: Record<Provider, string> = { google: "Google", instagram: "Instagram" };
 
 const date = (iso: string) => new Date(iso).toLocaleString("fr-FR", { dateStyle: "long", timeStyle: "short" });
@@ -154,6 +165,15 @@ const disconnect = (p: Provider) => {
   if (!window.confirm(`Déconnecter ${names[p]} ? Le site gardera les derniers éléments importés jusqu'à la prochaine connexion.`)) return;
   return run(`${p}-disconnect`, () => api.post(`/connexions/${p}/disconnect`), `${names[p]} déconnecté.`);
 };
+const editFeed = () => {
+  feedUrl.value = status.value?.instagram.feedUrl ?? "";
+  editingFeed.value = true;
+};
+const saveFeed = () =>
+  run("instagram-feed", async () => {
+    await api.post("/connexions/instagram/feed", { url: feedUrl.value });
+    editingFeed.value = false;
+  }, "Flux Instagram enregistré, photos importées.");
 const selectLocation = (location: string) => run("google-location", () => api.post("/connexions/google/location", { location }), "Fiche enregistrée.");
 
 onMounted(async () => {
@@ -178,6 +198,9 @@ onMounted(async () => {
 .sync { font-size: 14px; line-height: 1.5; }
 .sync.ok { color: var(--theme--foreground-subdued); }
 .sync.error { color: var(--theme--danger); }
+.feed { display: flex; gap: 12px; align-items: center; }
+.feed .v-input { flex: 1; }
+.label a { color: var(--theme--primary); text-decoration: underline; }
 .actions { display: flex; flex-wrap: wrap; gap: 12px; }
 .header-icon { --v-button-color-disabled: var(--theme--foreground); }
 </style>

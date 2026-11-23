@@ -418,6 +418,7 @@ async function schema() {
   ];
   await ensureCollection("instagram_auth", { singleton: true, hidden: true, icon: "key" }, [
     f.id(),
+    { field: "feed_url", type: "string", meta: { interface: "input", readonly: true, note: "Flux Behold (behold.so)" } },
     { field: "token", type: "text", meta: { interface: "input", hidden: true } },
     { field: "expires_at", type: "timestamp", meta: { interface: "datetime", readonly: true } },
     { field: "username", type: "string", meta: { interface: "input", readonly: true } },

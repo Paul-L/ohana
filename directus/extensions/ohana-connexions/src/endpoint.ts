@@ -1,7 +1,7 @@
 // API du module « Connexions » : /connexions/…
 import { type Ctx, type Provider, makeState, checkState, readAuth, publicUrl, errorMessage } from "./shared";
 import { type GoogleAuth, googleConfigured, googleAuthorizeUrl, googleCallback, googleSelectLocation, googleDisconnect, syncGoogle } from "./google";
-import { type InstagramAuth, instagramConfigured, instagramAuthorizeUrl, instagramCallback, instagramDisconnect, syncInstagram } from "./instagram";
+import { type InstagramAuth, instagramConfigured, instagramAuthorizeUrl, instagramCallback, instagramDisconnect, instagramSetFeed, syncInstagram } from "./instagram";
 
 const providers = {
   google: { configured: googleConfigured, authorizeUrl: googleAuthorizeUrl, callback: googleCallback, disconnect: googleDisconnect, sync: syncGoogle },
@@ -45,8 +45,10 @@ export default {
           lastSync: sync(g),
         },
         instagram: {
-          configured: instagramConfigured(),
-          connected: !!i.token,
+          configured: instagramConfigured(), // app Meta (connexion OAuth) ; sinon flux Behold
+          connected: !!(i.feed_url || i.token),
+          source: i.feed_url ? "behold" : i.token ? "api" : null,
+          feedUrl: i.feed_url ?? null,
           username: i.username ?? null,
           expiresAt: i.expires_at ?? null,
           lastSync: sync(i),
@@ -88,6 +90,11 @@ export default {
       const { provider } = req.params;
       if (!isProvider(provider)) return res.status(404).end();
       await providers[provider].disconnect(ctx);
+      res.json({ ok: true });
+    }));
+
+    router.post("/instagram/feed", guard, handle(async (req, res) => {
+      await instagramSetFeed(ctx, String(req.body?.url ?? ""));
       res.json({ ok: true });
     }));
 
