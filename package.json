@@ -13,6 +13,7 @@
     "check:contrast": "node --env-file=.env scripts/check-hero-contrast.ts",
     "reviews:sync": "node --env-file=.env scripts/sync-reviews.ts",
     "google:auth": "node --env-file=.env scripts/google-auth.ts",
+    "instagram:sync": "node --env-file=.env scripts/sync-instagram.ts",
     "cms:up": "docker compose up -d",
     "cms:down": "docker compose down",
     "cms:logs": "docker compose logs -f directus",

@@ -80,6 +80,8 @@ services:
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
       GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN}
       GOOGLE_LOCATION: ${GOOGLE_LOCATION}
+      # Synchro des photos Instagram (tâche planifiée : node scripts/sync-instagram.ts)
+      INSTAGRAM_TOKEN: ${INSTAGRAM_TOKEN:-}
 
 volumes:
   pgdata:

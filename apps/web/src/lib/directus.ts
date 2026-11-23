@@ -144,6 +144,18 @@ export interface Review {
   synced_at: "datetime";
 }
 
+/** Photos Instagram importées chaque semaine (scripts/sync-instagram.ts) : remplacent la galerie de l'accueil. */
+export interface InstagramPost {
+  id: number;
+  visible: boolean;
+  image: string | null;
+  caption: string | null;
+  permalink: string;
+  external_id: string;
+  posted_at: "datetime";
+  synced_at: "datetime";
+}
+
 interface Schema {
   settings: Settings;
   pages: Page[];
@@ -155,6 +167,7 @@ interface Schema {
   seasons: Season[];
   faq: Faq[];
   reviews: Review[];
+  instagram_posts: InstagramPost[];
 }
 
 // Client serveur uniquement (le token ne part jamais au navigateur)

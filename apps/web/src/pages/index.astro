@@ -5,7 +5,7 @@ import Icon from "@/components/Icon.astro";
 import Stars from "@/components/Stars.astro";
 import Lines from "@/components/Lines.astro";
 import EllohaWidget from "@/components/EllohaWidget.astro";
-import { directus, readItems, readSingleton, assetUrl, srcset, published, fileAlts, type Home, type HomeFile, type Review } from "@/lib/directus";
+import { directus, readItems, readSingleton, assetUrl, srcset, published, fileAlts, type Home, type HomeFile, type Review, type InstagramPost } from "@/lib/directus";
 import { editable } from "@/lib/visual-editing";
 import { formatPeriods, seasonConditions, eur } from "@/lib/pricing";
 import { telHref, lines, scoreValue, stripTags } from "@/lib/format";
@@ -16,7 +16,7 @@ const { settings, visualEditing: ve } = Astro.locals;
 const filesFields = ["directus_files_id", "sort"] as const;
 // Avis Google (synchro nocturne) : 4 et 5 étoiles, avec texte, conservés moins de 30 jours (règles Google)
 const reviewsSince = new Date(Date.now() - 30 * 86_400_000).toISOString();
-const [home, [lodge], rooms, seasons, faq, reviews] = await Promise.all([
+const [home, [lodge], rooms, seasons, faq, reviews, instagram] = await Promise.all([
   directus
     .request(readSingleton("home", { fields: ["*", { lodge_images: [...filesFields] }, { gallery: [...filesFields] }] }))
     .catch(() => null) as Promise<Home | null>,
@@ -36,13 +36,27 @@ const [home, [lodge], rooms, seasons, faq, reviews] = await Promise.all([
       }),
     )
     .catch(() => [] as Review[]),
+  // Photos Instagram (synchro hebdomadaire) : les 5 plus récentes remplacent la galerie saisie à la main
+  directus
+    .request(
+      readItems("instagram_posts", {
+        filter: { visible: { _eq: true }, image: { _nnull: true } },
+        sort: ["-posted_at"],
+        limit: 5,
+        fields: ["id", "image", "permalink"],
+      }),
+    )
+    .catch(() => [] as InstagramPost[]),
 ]);
 
 const sorted = (files: HomeFile[] | undefined) => [...(files ?? [])].sort((a, b) => (a.sort ?? 0) - (b.sort ?? 0)).map((f) => f.directus_files_id);
 const lodgeImages = sorted(home?.lodge_images).slice(0, 3);
-const gallery = sorted(home?.gallery).slice(0, 5);
+const instagramPhotos = instagram.length >= 5 ? instagram : [];
+const gallery: { id: string; href?: string }[] = instagramPhotos.length
+  ? instagramPhotos.map((p) => ({ id: p.image!, href: p.permalink }))
+  : sorted(home?.gallery).slice(0, 5).map((id) => ({ id }));
 // Textes alternatifs saisis dans la médiathèque (description ou titre de chaque image)
-const alts = await fileAlts([settings?.hero_image, home?.booking_image, ...lodgeImages, ...gallery, ...rooms.map((r) => r.cover)]);
+const alts = await fileAlts([settings?.hero_image, home?.booking_image, ...lodgeImages, ...gallery.map((g) => g.id), ...rooms.map((r) => r.cover)]);
 const alt = (id: string | null | undefined) => (id && alts.get(id)) || "";
 
 const minPrice = Math.min(...seasons.map((s) => s.price_double ?? Infinity));
@@ -434,22 +448,29 @@ const h2 = "title-xl";
         </div>
         <div
           class="flex snap-x snap-mandatory gap-2.5 overflow-x-auto px-4 pb-2 md:grid md:auto-rows-[260px] md:grid-cols-4 md:gap-3 md:overflow-visible md:px-0 md:pb-0"
-          {...edit("gallery", "drawer")}
+          {...(instagramPhotos.length ? {} : edit("gallery", "drawer"))}
         >
-          {gallery.map((id, i) => (
-            <img
-              src={assetUrl(id, { width: i === 0 ? 1200 : 600 })}
-              srcset={srcset(id, i === 0 ? [480, 800, 1200] : [320, 480, 600])}
-              sizes={i === 0 ? "(min-width: 768px) 600px, 240px" : "(min-width: 768px) 300px, 240px"}
-              alt={alt(id)}
-              loading="lazy"
-              decoding="async"
-              class:list={[
-                "reveal h-[300px] w-[240px] shrink-0 snap-start rounded-xl object-cover md:size-full",
-                i === 0 && "md:col-span-2 md:row-span-2",
-              ]}
-            />
-          ))}
+          {gallery.map(({ id, href }, i) => {
+            const cell = ["reveal h-[300px] w-[240px] shrink-0 snap-start rounded-xl md:size-full", i === 0 && "md:col-span-2 md:row-span-2"];
+            const img = (
+              <img
+                src={assetUrl(id, { width: i === 0 ? 1200 : 600 })}
+                srcset={srcset(id, i === 0 ? [480, 800, 1200] : [320, 480, 600])}
+                sizes={i === 0 ? "(min-width: 768px) 600px, 240px" : "(min-width: 768px) 300px, 240px"}
+                alt={alt(id)}
+                loading="lazy"
+                decoding="async"
+                class:list={href ? "size-full object-cover transition duration-500 group-hover:scale-[1.03]" : [...cell, "object-cover"]}
+              />
+            );
+            return href ? (
+              <a href={href} class:list={[...cell, "group block overflow-hidden"]} aria-label={alt(id) ? undefined : "Voir la publication sur Instagram"}>
+                {img}
+              </a>
+            ) : (
+              img
+            );
+          })}
         </div>
         {settings?.instagram_url && (
           <a href={settings.instagram_url} class="link-arrow mx-4 mt-3 md:hidden">

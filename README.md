@@ -43,6 +43,7 @@ docker-compose.prod.yml   Prod Coolify (Postgres + Directus + web)
 | `rooms` (+ `rooms_files`) | Chambres, photo principale, galerie |
 | `home`, `seasons`, `faq` | Textes de l'accueil, tarifs, questions fréquentes |
 | `reviews` | Avis Google, importés chaque nuit (la propriétaire peut en masquer) |
+| `instagram_posts` | Dernières photos Instagram, importées chaque semaine : remplacent la galerie de l'accueil |
 
 Rôles : **Propriétaire** (contenu, pas de réglages techniques), **Site web** (token statique du serveur Astro).
 
@@ -60,6 +61,7 @@ Rôles : **Propriétaire** (contenu, pas de réglages techniques), **Site web** 
 | `pnpm db:backup` | Dump Postgres dans `backups/` |
 | `pnpm reviews:sync` | Synchronise les avis Google (lancé chaque nuit en production) |
 | `pnpm google:auth` | Autorisation unique de l'accès aux avis Google |
+| `pnpm instagram:sync` | Importe les dernières photos Instagram (lancé chaque semaine en production) |
 
 ## Déploiement (Coolify)
 
@@ -108,3 +110,29 @@ Les disponibilités, prix et couleurs du moteur lui-même se règlent dans le ba
     **tâche planifiée** sur le service `web` : commande `node scripts/sync-reviews.ts`, fréquence `0 4 * * *`.
 11. Dans Directus (Accueil › Avis › Notes › Google), renseigner le lien vers les avis Google de la fiche.
 
+## Photos Instagram
+
+`scripts/sync-instagram.ts` importe chaque semaine les 12 dernières publications du compte (photos, 1re image des
+carrousels, couverture des vidéos) dans la médiathèque Directus (dossier « Instagram »). Les plus anciennes sont
+retirées avec leur image : la galerie « Le lieu en images » de l'accueil affiche les 5 plus récentes, chacune liée à
+sa publication. Moins de 5 photos disponibles → la galerie saisie à la main dans Accueil › Galerie reprend sa place.
+La propriétaire peut masquer une photo (Contenu du site › Photos Instagram › « Afficher ») et donner un texte
+alternatif à chaque image (description dans la médiathèque). Le lien « Suivre sur Instagram » est rempli
+automatiquement s'il est vide (Réglages › Coordonnées).
+
+### Mise en place (une fois)
+
+1. Compte Instagram du lodge en **compte professionnel** (Instagram › Paramètres › Type de compte, gratuit).
+2. [Meta for Developers](https://developers.facebook.com/apps) : créer une app, cas d'usage
+   « Gérer les messages et le contenu sur Instagram » (API Instagram avec connexion Instagram).
+3. Rôles de l'app › ajouter le compte Instagram comme **testeur Instagram**, puis accepter l'invitation depuis
+   Instagram (Paramètres › Apps et sites web › Invitations). L'app peut rester en mode développement : elle ne lit
+   que ce compte, pas besoin d'examen par Meta.
+4. Configuration de l'API › « Générer des jetons d'accès » : ajouter le compte, générer le jeton (permission
+   `instagram_business_basic`) → `INSTAGRAM_TOKEN` dans `.env` et dans Coolify.
+5. `pnpm cms:bootstrap` (avec `DIRECTUS_SYNC_TOKEN`, partagé avec la synchro des avis), puis tester : `pnpm instagram:sync`.
+6. Production : **tâche planifiée** sur le service `web` : commande `node scripts/sync-instagram.ts`, fréquence `0 5 * * 1`
+   (lundi 5 h).
+
+Le jeton dure 60 jours ; chaque passage le renouvelle et le garde dans Directus (collection masquée `instagram_auth`).
+Si la synchro s'arrête plus de 60 jours, générer un nouveau jeton (étape 4).

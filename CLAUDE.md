@@ -13,6 +13,7 @@ Priorités : performance, mobile-first, SEO/GEO, simplicité d'administration po
 - `pnpm dev` · `pnpm check` (doit rester à 0 erreur) · `pnpm build`
 - `pnpm cms:up` · `pnpm cms:bootstrap` (idempotent)
 - `pnpm reviews:sync` (chaque nuit en prod, tâche Coolify) · `pnpm google:auth` (autorisation unique, voir README « Notes et avis »)
+- `pnpm instagram:sync` (chaque semaine en prod, tâche Coolify, voir README « Photos Instagram »)
 - `pnpm check:contrast [photo|id]` : contraste du texte sur la photo d'accueil (voile réglé dans `src/lib/hero-overlay.ts`, partagé avec la page)
 
 ## Règles
@@ -26,3 +27,4 @@ Priorités : performance, mobile-first, SEO/GEO, simplicité d'administration po
 - Ne jamais committer `.env`, `directus/uploads`, `backups/`.
 - Elloha : les styles Elloha sont neutralisés (les `<template id="CoWidgetCss…">` occupent leurs id) ; tout l'habillage est dans `EllohaWidget.astro`, à vérifier si Elloha change son HTML. Si Elloha ne répond pas, la barre affiche téléphone et e-mail. Tous les boutons « Réserver » pointent vers `/#reserver` (`/reserver` y redirige).
 - Avis Google (`reviews`) : règles Business Profile API → 50 avis max, conservés 30 jours au plus après leur dernière synchro, texte jamais modifié (champs en lecture seule ; seule la case « visible » est éditable). Garder la mention de sélection sous les avis. Pas de scraping (Google, Booking) ni de stockage d'avis Tripadvisor (interdit par leur API) : notes Booking/Tripadvisor saisies à la main.
+- Photos Instagram (`instagram_posts`) : API Instagram officielle, jamais de scraping. Images copiées dans la médiathèque (les URL Instagram expirent), roulement sur les 12 dernières ; la galerie de l'accueil n'utilise Instagram qu'à partir de 5 photos, sinon la galerie manuelle.

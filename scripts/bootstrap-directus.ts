@@ -292,7 +292,7 @@ async function schema() {
   );
   await fileRelation("home", "booking_image");
   await filesField("home", "lodge_images", "home_lodge_images", "Section « Le lodge » : 3 photos, la 1re en grand");
-  await filesField("home", "gallery", "home_gallery", "Section « Le lieu en images » : 5 photos, la 1re en grand");
+  await filesField("home", "gallery", "home_gallery", "Section « Le lieu en images » : 5 photos, la 1re en grand (remplacées par les photos Instagram dès qu'il y en a)");
 
   await ensureCollection(
     "seasons",
@@ -387,6 +387,41 @@ async function schema() {
     ],
   );
 
+  // --- Photos Instagram importées chaque semaine (scripts/sync-instagram.ts) ---
+  await ensureCollection(
+    "instagram_posts",
+    {
+      icon: "photo_camera",
+      display_template: "{{posted_at}}",
+      sort_field: null,
+      translations: [{ language: "fr-FR", translation: "Photos Instagram" }],
+      note: "Importées automatiquement chaque semaine depuis Instagram : les plus récentes remplacent la galerie de l'accueil. Décochez « Afficher » pour retirer une photo du site.",
+    },
+    [
+      f.id(),
+      { field: "visible", type: "boolean", schema: { default_value: true }, meta: { interface: "boolean", width: "half", note: "Afficher dans la galerie de l'accueil" } },
+      ro({ field: "posted_at", type: "timestamp", meta: { interface: "datetime", width: "half", display: "datetime" } }),
+      ro(f.image("image", "Texte alternatif : renseigner la description de l'image dans la médiathèque")),
+      ro(f.text("caption")),
+      ro(f.string("permalink", undefined, { width: "full" })),
+      ro({ field: "external_id", type: "string", schema: { is_unique: true }, meta: { interface: "input", hidden: true } }),
+      ro({ field: "synced_at", type: "timestamp", meta: { interface: "datetime", width: "half", note: "Dernière synchronisation" } }),
+    ],
+  );
+  await fileRelation("instagram_posts", "image");
+
+  // Jeton Instagram renouvelé par la synchro : invisible dans le back-office, lisible seulement par la synchro
+  await ensureCollection("instagram_auth", { singleton: true, hidden: true, icon: "key" }, [
+    f.id(),
+    { field: "token", type: "text", meta: { interface: "input", hidden: true } },
+    { field: "expires_at", type: "timestamp", meta: { interface: "datetime", readonly: true } },
+  ]);
+  const folders = await api<{ id: string }[]>("GET", "/folders?filter[name][_eq]=Instagram&fields=id");
+  if (!folders.length) {
+    await api("POST", "/folders", { name: "Instagram" });
+    console.log("+ dossier de fichiers Instagram");
+  }
+
 }
 
 // ---------------------------------------------------------------- Présentation du back-office
@@ -479,6 +514,9 @@ async function backOffice() {
   ]);
 
   await arrange("faq", [["", [["status", "Statut"], ["question", "Question"], ["answer", "Réponse"]]]]);
+  await arrange("instagram_posts", [
+    ["", [["visible", "Afficher"], ["posted_at", "Publiée le"], ["image", "Photo"], ["caption", "Légende"], ["permalink", "Lien de la publication"], ["synced_at", "Synchronisée le"]]],
+  ]);
   await arrange("reviews", [
     ["", [["visible", "Afficher"], ["rating", "Note"], ["author", "Auteur"], ["published_at", "Publié le"], ["text", "Avis"], ["synced_at", "Synchronisé le"]]],
   ]);
@@ -538,6 +576,7 @@ async function access() {
     { collection: "seasons", action: "read" },
     { collection: "faq", action: "read" },
     { collection: "reviews", action: "read" },
+    { collection: "instagram_posts", action: "read" },
     { collection: "directus_files", action: "read" },
   ]);
   const webRole = await ensureRole("Site web", webPolicy, "public");
@@ -566,16 +605,26 @@ async function access() {
     { collection: "reviews", action: "read" },
     { collection: "reviews", action: "update" },
     { collection: "reviews", action: "delete" },
+    { collection: "instagram_posts", action: "read" },
+    { collection: "instagram_posts", action: "update" },
     ...crud("directus_files"),
     { collection: "directus_folders", action: "read" },
   ]);
   await ensureRole("Propriétaire", ownerPolicy, "home");
 
-  // Synchro des avis Google (tâche planifiée) : écrit les avis et la note Google, rien d'autre
+  // Synchros planifiées (avis Google chaque nuit, photos Instagram chaque semaine) : rien d'autre
   const syncPolicy = await ensurePolicy("Synchro avis", { icon: "sync", app_access: false, admin_access: false }, [
     ...crud("reviews"),
     { collection: "home", action: "read" },
     { collection: "home", action: "update" },
+    ...crud("instagram_posts"),
+    ...crud("instagram_auth"),
+    { collection: "settings", action: "read" },
+    { collection: "settings", action: "update" },
+    { collection: "directus_files", action: "create" },
+    { collection: "directus_files", action: "read" },
+    { collection: "directus_files", action: "delete" },
+    { collection: "directus_folders", action: "read" },
   ]);
   const syncRole = await ensureRole("Synchro avis", syncPolicy, "sync");
   if (SYNC_TOKEN) {
@@ -620,6 +669,7 @@ async function projectSettings() {
     seasons: `${SITE_URL}/?${ve}#tarifs`,
     faq: `${SITE_URL}/?${ve}#infos`,
     reviews: `${SITE_URL}/?${ve}#avis`,
+    instagram_posts: `${SITE_URL}/?${ve}#galerie`,
     rooms: `${SITE_URL}/chambres/{{slug}}?${ve}`,
     pages: `${SITE_URL}/{{slug}}?${ve}`,
   };
@@ -727,8 +777,9 @@ async function navigation() {
     ["seasons", FOLDER, 3],
     ["faq", FOLDER, 4],
     ["reviews", FOLDER, 5],
-    ["pages", FOLDER, 6],
-    ["settings", FOLDER, 7],
+    ["instagram_posts", FOLDER, 6],
+    ["pages", FOLDER, 7],
+    ["settings", FOLDER, 8],
   ];
   let moved = 0;
   for (const [collection, group, sort] of order) {
