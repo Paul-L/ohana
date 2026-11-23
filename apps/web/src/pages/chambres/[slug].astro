@@ -1,6 +1,6 @@
 ---
 import Base from "@/layouts/Base.astro";
-import { directus, readItems, assetUrl, published } from "@/lib/directus";
+import { directus, readItems, assetUrl, srcset, published, fileAlts } from "@/lib/directus";
 import { editable } from "@/lib/visual-editing";
 
 const ve = Astro.locals.visualEditing;
@@ -13,35 +13,52 @@ const [room] = await directus.request(
 );
 if (!room) return Astro.rewrite("/404");
 
+const seasons = await directus.request(readItems("seasons", { filter: published, fields: ["price_double"] }));
+const min = Math.min(...seasons.map((s) => s.price_double ?? Infinity));
+const price = room.price_from ?? (Number.isFinite(min) ? min : null);
 const gallery = (room.gallery ?? []).map((g) => g.directus_files_id);
+const alts = await fileAlts([room.cover, ...gallery]);
+const facts = [room.capacity && `Jusqu'à ${room.capacity} personnes`, room.bed && `Lit ${room.bed}`, room.features, "Petit-déjeuner inclus"].filter(Boolean);
 ---
 
 <Base title={room.name} description={room.summary} image={room.cover}>
-  <article class="mx-auto max-w-5xl px-4 py-12">
+  <article class="mx-auto max-w-[1240px] px-4 py-8 md:px-6 md:py-12">
+    <a href="/#chambres" class="text-sm text-muted underline underline-offset-4">← Toutes les chambres</a>
     {
       room.cover && (
         <img
           src={assetUrl(room.cover, { width: 1600 })}
-          srcset={`${assetUrl(room.cover, { width: 768 })} 768w, ${assetUrl(room.cover, { width: 1600 })} 1600w`}
-          sizes="(min-width: 1024px) 1024px, 100vw"
-          alt={room.name}
+          srcset={srcset(room.cover, [640, 960, 1280, 1600, 2400])}
+          sizes="(min-width: 1240px) 1192px, 100vw"
+          alt={alts.get(room.cover) || room.name}
           fetchpriority="high"
-          class="aspect-[16/9] w-full rounded-2xl object-cover"
+          class="mt-4 aspect-[4/3] w-full rounded-2xl object-cover md:aspect-[2/1]"
           {...editable(ve, "rooms", room.id, ["cover", "gallery"], "drawer")}
         />
       )
     }
 
     <div class="mt-10 grid gap-10 md:grid-cols-[2fr_1fr]">
-      <div {...editable(ve, "rooms", room.id, ["name", "summary", "description"], "drawer")}>
-        <h1 class="text-4xl">{room.name}</h1>
-        {room.summary && <p class="mt-3 text-lg text-ink/80">{room.summary}</p>}
-        {room.description && <div class="prose-ohana mt-6" set:html={room.description} />}
+      <div>
+        <h1 class="title-xl" {...editable(ve, "rooms", room.id, "name")}>{room.name}</h1>
+        {room.summary && <p class="mt-3 text-lg text-body" {...editable(ve, "rooms", room.id, "summary")}>{room.summary}</p>}
+        {room.description && <div class="prose-ohana mt-6 text-body" set:html={room.description} {...editable(ve, "rooms", room.id, "description", "drawer")} />}
       </div>
-      <aside class="h-fit rounded-2xl bg-sand-100 p-6" {...editable(ve, "rooms", room.id, ["capacity", "price_from"])}>
-        {room.capacity && <p>Jusqu'à {room.capacity} personnes</p>}
-        {room.price_from && <p class="mt-1 text-2xl">À partir de {room.price_from} €<span class="text-sm"> / nuit</span></p>}
-        <a href={`/reserver?chambre=${room.id}`} class="mt-5 block rounded-full bg-ocean px-5 py-3 text-center text-sand-50 hover:bg-ocean-dark">
+      <aside
+        class="flex h-fit flex-col gap-4 rounded-2xl bg-white p-6 shadow-[0_12px_40px_rgba(20,24,20,0.08)]"
+        {...editable(ve, "rooms", room.id, ["capacity", "price_from", "bed", "features"])}
+      >
+        {
+          price && (
+            <p class="font-display text-[28px] leading-none font-medium">
+              dès {price} €<span class="font-sans text-sm font-normal text-muted"> / nuit</span>
+            </p>
+          )
+        }
+        <ul class="flex flex-col gap-1.5 text-[15px] text-body">
+          {facts.map((f) => <li>— {f}</li>)}
+        </ul>
+        <a href={`/reserver?chambre=${room.id}`} class="flex min-h-12 items-center justify-center rounded-[10px] bg-night font-semibold text-white hover:text-white">
           Demander une réservation
         </a>
       </aside>
@@ -49,9 +66,17 @@ const gallery = (room.gallery ?? []).map((g) => g.directus_files_id);
 
     {
       gallery.length > 0 && (
-        <div class="mt-12 grid grid-cols-2 gap-4 sm:grid-cols-3">
+        <div class="mt-12 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {gallery.map((id) => (
-            <img src={assetUrl(id, { width: 600 })} alt="" loading="lazy" decoding="async" class="aspect-square w-full rounded-xl object-cover" />
+            <img
+              src={assetUrl(id, { width: 600 })}
+              srcset={srcset(id, [400, 600, 900])}
+              sizes="(min-width: 640px) 33vw, 50vw"
+              alt={alts.get(id) ?? ""}
+              loading="lazy"
+              decoding="async"
+              class="reveal aspect-square w-full rounded-xl object-cover"
+            />
           ))}
         </div>
       )

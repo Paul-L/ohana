@@ -5,8 +5,8 @@ import { isVisualEditing } from "@/lib/visual-editing";
 export const onRequest = defineMiddleware(async (ctx, next) => {
   ctx.locals.visualEditing = isVisualEditing(ctx.url, ctx.cookies);
 
-  // Les actions et assets n'ont pas besoin des réglages globaux
-  if (!ctx.url.pathname.startsWith("/_")) {
+  // Les actions, assets et routes API n'ont pas besoin des réglages globaux
+  if (!ctx.url.pathname.startsWith("/_") && !ctx.url.pathname.startsWith("/api/")) {
     ctx.locals.settings = await directus.request(readSingleton("settings")).catch(() => null);
   }
 

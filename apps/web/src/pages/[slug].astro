@@ -1,21 +1,24 @@
 ---
 // Pages libres gérées dans Directus (à propos, accès, mentions légales…)
 import Base from "@/layouts/Base.astro";
-import { directus, readItems, assetUrl, published } from "@/lib/directus";
+import { directus, readItems, assetUrl, published, fileAlts } from "@/lib/directus";
 import { editable } from "@/lib/visual-editing";
 
 const ve = Astro.locals.visualEditing;
+// La page « accueil » alimente la section « Le lodge » de la page d'accueil (aperçu Directus inclus)
+if (Astro.params.slug === "accueil") return Astro.redirect(`/${Astro.url.search}#lodge`, 301);
 const [page] = await directus.request(
   readItems("pages", { filter: { ...published, slug: { _eq: Astro.params.slug!, _neq: "accueil" } }, limit: 1 }),
 );
 if (!page) return Astro.rewrite("/404");
+const coverAlt = (await fileAlts([page.cover])).get(page.cover ?? "") ?? "";
 ---
 
 <Base title={page.title} description={page.seo_description} image={page.cover}>
-  <article class="mx-auto max-w-3xl px-4 py-16" {...editable(ve, "pages", page.id, ["title", "intro", "content", "cover"], "drawer")}>
-    <h1 class="text-4xl">{page.title}</h1>
-    {page.intro && <p class="mt-4 text-lg text-ink/80">{page.intro}</p>}
-    {page.cover && <img src={assetUrl(page.cover, { width: 1200 })} alt="" class="mt-8 w-full rounded-2xl" />}
-    {page.content && <div class="prose-ohana mt-6" set:html={page.content} />}
+  <article class="mx-auto max-w-3xl px-4 py-12 md:py-20">
+    <h1 class="title-xl" {...editable(ve, "pages", page.id, "title")}>{page.title}</h1>
+    {page.intro && <p class="mt-4 text-lg text-body" {...editable(ve, "pages", page.id, "intro")}>{page.intro}</p>}
+    {page.cover && <img src={assetUrl(page.cover, { width: 1200 })} alt={coverAlt} class="mt-8 w-full rounded-2xl" loading="lazy" {...editable(ve, "pages", page.id, "cover", "drawer")} />}
+    {page.content && <div class="prose-ohana mt-6" set:html={page.content} {...editable(ve, "pages", page.id, "content", "drawer")} />}
   </article>
 </Base>

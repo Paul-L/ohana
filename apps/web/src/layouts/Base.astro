@@ -1,23 +1,32 @@
 ---
 import "@/styles/global.css";
+import { Font } from "astro:assets";
 import VisualEditing from "@/components/VisualEditing.astro";
+import Logo from "@/components/Logo.astro";
+import Emblem from "@/components/Emblem.astro";
+import Icon from "@/components/Icon.astro";
 import { editable } from "@/lib/visual-editing";
 import { assetUrl } from "@/lib/directus";
+import { telHref, lines, postalAddress } from "@/lib/format";
 
 interface Props {
   title?: string;
   description?: string | null;
   image?: string | null;
+  /** "minimal" : en-tête réduit (parcours de réservation) */
+  variant?: "full" | "minimal";
 }
 
 const { settings, visualEditing } = Astro.locals;
 const siteName = settings?.site_name ?? "Ohana Lodge";
-const { title, description = settings?.seo_description, image = settings?.hero_image } = Astro.props;
+const { title, description = settings?.seo_description, image = settings?.hero_image, variant = "full" } = Astro.props;
 const fullTitle = title ? `${title} · ${siteName}` : siteName;
 const canonical = new URL(Astro.url.pathname, Astro.site);
 const ogImage = assetUrl(image, { width: 1200, height: 630, format: "webp" });
+const phone = settings?.phone;
+const hhmm = (t: string | null | undefined) => t?.slice(0, 5);
 
-// Données structurées : aide Google ET les moteurs IA (GEO) à comprendre l'activité
+// Données structurées : aident Google ET les moteurs IA (GEO) à comprendre l'activité
 const jsonLd = {
   "@context": "https://schema.org",
   "@type": "BedAndBreakfast",
@@ -25,15 +34,31 @@ const jsonLd = {
   description: settings?.seo_description ?? undefined,
   url: Astro.site?.toString(),
   email: settings?.contact_email ?? undefined,
-  telephone: settings?.phone ?? undefined,
-  address: settings?.address ?? undefined,
+  telephone: phone ?? undefined,
+  address: postalAddress(settings?.address),
+  geo:
+    settings?.latitude && settings?.longitude
+      ? { "@type": "GeoCoordinates", latitude: settings.latitude, longitude: settings.longitude }
+      : undefined,
   image: ogImage,
+  checkinTime: hhmm(settings?.checkin_from),
+  checkoutTime: hhmm(settings?.checkout_until),
+  petsAllowed: false,
+  smokingAllowed: false,
+  numberOfRooms: 4,
+  amenityFeature: ["Piscine", "Petit-déjeuner inclus", "Wi-Fi gratuit", "Terrasse privative"].map((name) => ({
+    "@type": "LocationFeatureSpecification",
+    name,
+    value: true,
+  })),
 };
 
 const nav = [
-  { href: "/", label: "Accueil" },
-  { href: "/chambres", label: "Chambres" },
-  { href: "/reserver", label: "Réserver" },
+  { href: "/#chambres", label: "Chambres" },
+  { href: "/#tarifs", label: "Tarifs" },
+  { href: "/#lodge", label: "Le lodge" },
+  { href: "/#infos", label: "Infos pratiques" },
+  { href: "/#acces", label: "Accès" },
 ];
 ---
 
@@ -45,45 +70,127 @@ const nav = [
     <title>{fullTitle}</title>
     {description && <meta name="description" content={description} />}
     <link rel="canonical" href={canonical} />
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <meta name="theme-color" content="#f7f5f0" />
     <meta property="og:type" content="website" />
+    <meta property="og:locale" content="fr_FR" />
     <meta property="og:title" content={fullTitle} />
     {description && <meta property="og:description" content={description} />}
     {ogImage && <meta property="og:image" content={ogImage} />}
     <link rel="sitemap" href="/sitemap-index.xml" />
+    <Font cssVariable="--font-inter" preload />
+    <Font cssVariable="--font-inter-tight" preload />
     <script type="application/ld+json" set:html={JSON.stringify(jsonLd)} />
+    <slot name="head" />
     {visualEditing && <meta name="robots" content="noindex" />}
   </head>
-  <body class="min-h-dvh flex flex-col">
-    <header class="sticky top-0 z-10 bg-sand-50/90 backdrop-blur border-b border-sand-300">
-      <div class="mx-auto max-w-5xl px-4 h-16 flex items-center justify-between">
-        <a href="/" class="font-serif text-xl" {...settings && editable(visualEditing, "settings", settings.id, "site_name")}>
-          {siteName}
-        </a>
-        <nav class="flex gap-5 text-sm">
-          {nav.map((l) => (
-            <a href={l.href} class:list={["hover:text-ocean", Astro.url.pathname === l.href && "text-ocean font-medium"]}>
-              {l.label}
-            </a>
-          ))}
-        </nav>
-      </div>
-    </header>
+  <body class:list={["flex min-h-dvh flex-col", variant === "full" && "pb-[84px] md:pb-0"]}>
+    <a href="#contenu" class="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:rounded-full focus:bg-night focus:px-4 focus:py-2 focus:text-white">
+      Aller au contenu
+    </a>
 
-    <main class="flex-1">
+    {
+      variant === "full" ? (
+        <header class="sticky top-0 z-20 border-b border-line bg-paper/95 backdrop-blur">
+          <div class="mx-auto flex h-[60px] max-w-[1240px] items-center justify-between gap-4 px-4 md:h-[72px] md:px-6">
+            <Logo />
+            <nav aria-label="Navigation principale" class="hidden items-center gap-7 text-[15px] lg:flex">
+              {nav.map((l) => <a href={l.href}>{l.label}</a>)}
+            </nav>
+            <div class="flex items-center gap-2">
+              <a href="/reserver" class="btn-dark hidden text-[15px] sm:inline-flex">
+                Réserver
+              </a>
+              <details class="mobile-menu relative lg:hidden">
+                <summary class="flex size-11 cursor-pointer list-none items-center justify-center rounded-full [&::-webkit-details-marker]:hidden">
+                  <span class="sr-only">Menu</span>
+                  <Icon name="menu" class="menu-open" />
+                  <Icon name="close" class="menu-close hidden" />
+                </summary>
+                <nav aria-label="Menu" class="absolute top-full right-0 mt-2 flex w-60 flex-col rounded-2xl border border-line bg-white p-2 shadow-[0_16px_40px_rgba(17,17,17,0.12)]">
+                  {nav.map((l) => (
+                    <a href={l.href} class="rounded-lg px-4 py-3 hover:bg-paper">
+                      {l.label}
+                    </a>
+                  ))}
+                  <a href="/reserver" class="btn-dark mt-2 rounded-lg">
+                    Réserver
+                  </a>
+                </nav>
+              </details>
+            </div>
+          </div>
+        </header>
+      ) : (
+        <header class="border-b border-line bg-paper">
+          <div class="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-4 px-4 py-3.5 md:px-6">
+            <Logo />
+            {phone && (
+              <a href={telHref(phone)} class="inline-flex min-h-11 items-center font-medium">
+                <span class="hidden sm:inline">Une question ?&nbsp;</span>
+                {phone}
+              </a>
+            )}
+          </div>
+        </header>
+      )
+    }
+
+    <main id="contenu" class="flex-1">
       <slot />
     </main>
 
-    <footer class="border-t border-sand-300 text-sm">
-      <div
-        class="mx-auto max-w-5xl px-4 py-8 grid gap-2 sm:grid-cols-3"
-        {...settings && editable(visualEditing, "settings", settings.id, ["address", "phone", "contact_email"], "drawer")}
-      >
-        <p>{settings?.address}</p>
-        {settings?.phone && <a href={`tel:${settings.phone.replace(/\s/g, "")}`}>{settings.phone}</a>}
-        {settings?.contact_email && <a href={`mailto:${settings.contact_email}`}>{settings.contact_email}</a>}
+    <footer class="mt-30 bg-ink text-cloud">
+      <div class="mx-auto flex max-w-[1240px] flex-wrap justify-between gap-8 px-4 pt-16 pb-10 md:px-6">
+        <div class="flex flex-col gap-4" {...settings && editable(visualEditing, "settings", settings.id, ["address", "phone"])}>
+          <Emblem class="h-12 w-auto self-start text-white" />
+          <p class="text-sm text-mist">
+            Chambres d'hôtes · {lines(settings?.address).join(", ")}
+            {phone && (
+              <>
+                <br />
+                <a href={telHref(phone)} class="text-mist hover:text-white">{phone}</a>
+              </>
+            )}
+          </p>
+        </div>
+        <nav aria-label="Liens de pied de page" class="flex flex-wrap items-start gap-x-7 gap-y-3 text-sm">
+          <a href="/conditions-de-vente" class="text-cloud hover:text-white">Conditions de vente</a>
+          <a href="/mentions-legales" class="text-cloud hover:text-white">Mentions légales</a>
+          {settings?.instagram_url && <a href={settings.instagram_url} class="text-cloud hover:text-white">Instagram</a>}
+        </nav>
       </div>
     </footer>
 
+    {
+      variant === "full" && (
+        <div class="fixed inset-x-0 bottom-0 z-20 grid grid-cols-2 gap-2.5 border-t border-line bg-paper/97 px-4 pt-3 pb-[max(20px,env(safe-area-inset-bottom))] md:hidden">
+          {phone && (
+            <a href={telHref(phone)} class="flex h-[50px] items-center justify-center gap-2 rounded-full border border-ink font-semibold">
+              <Icon name="phone" size={18} stroke={1.6} />
+              Appeler
+            </a>
+          )}
+          <a href="/reserver" class:list={["flex h-[50px] items-center justify-center rounded-full bg-night font-semibold text-white hover:text-white", !phone && "col-span-2"]}>
+            Réserver
+          </a>
+        </div>
+      )
+    }
+
     {visualEditing && <VisualEditing />}
+
+    <script>
+      // Menu mobile : se referme après un clic sur un lien (ancres de la même page)
+      document.querySelectorAll<HTMLDetailsElement>(".mobile-menu").forEach((menu) => {
+        menu.addEventListener("click", (e) => {
+          if ((e.target as Element).closest("a")) menu.open = false;
+        });
+      });
+    </script>
+    <style>
+      .mobile-menu[open] .menu-open { display: none; }
+      .mobile-menu[open] .menu-close { display: block; }
+    </style>
   </body>
 </html>

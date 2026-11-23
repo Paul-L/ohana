@@ -39,8 +39,9 @@ export const server = {
         room: z.coerce.number().int().positive().optional(),
         arrival: z.iso.date("Date d'arrivée invalide"),
         departure: z.iso.date("Date de départ invalide"),
-        guests: z.coerce.number().int().min(1).max(20),
+        guests: z.coerce.number().int().min(1).max(8),
         message: z.string().trim().max(3000).optional(),
+        terms: z.literal("on", "Merci d'accepter les conditions de vente"),
         // Honeypot : doit rester vide (les robots le remplissent)
         website: z.string().max(0).optional(),
         "cf-turnstile-response": z.string().min(1, "Vérification anti-robot manquante"),
@@ -52,7 +53,7 @@ export const server = {
         throw new ActionError({ code: "FORBIDDEN", message: "Vérification anti-robot échouée, réessayez." });
       }
 
-      const { website: _hp, "cf-turnstile-response": _ts, ...data } = input;
+      const { website: _hp, "cf-turnstile-response": _ts, terms: _terms, ...data } = input;
 
       // 1. Enregistrement dans Directus (visible par la propriétaire dans le back-office)
       await directus.request(createItem("booking_requests", { ...data, status: "new" }));
@@ -95,7 +96,7 @@ export const server = {
         else if (r.value.error) console.error("[resend]", r.value.error);
       }
 
-      return { ok: true };
+      return { ok: true, roomName };
     },
   }),
 };

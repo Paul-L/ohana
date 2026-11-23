@@ -1,4 +1,4 @@
-import { createDirectus, rest, staticToken, readItems, readSingleton } from "@directus/sdk";
+import { createDirectus, rest, staticToken, readItems, readSingleton, readFiles } from "@directus/sdk";
 import { DIRECTUS_URL, DIRECTUS_PUBLIC_URL, DIRECTUS_WEB_TOKEN } from "astro:env/server";
 
 // ---------- Types (miroir du schéma créé par scripts/bootstrap-directus.ts) ----------
@@ -14,6 +14,110 @@ export interface Settings {
   phone: string | null;
   address: string | null;
   hero_image: string | null;
+  checkin_from: string | null; // "17:00:00"
+  checkin_to: string | null;
+  checkout_until: string | null;
+  tourist_tax: number | null;
+  deposit_percent: number | null;
+  instagram_url: string | null;
+  latitude: number | null;
+  longitude: number | null;
+}
+
+export type FactIcon = "bed" | "arrival" | "departure" | "breakfast" | "beach" | "pool" | "wifi" | "parking";
+export type RatingSource = "google" | "booking" | "tripadvisor";
+
+export interface Home {
+  id: number;
+  hero_eyebrow: string | null;
+  key_facts: { icon: FactIcon; label: string; value: string }[] | null;
+  ratings: { source: RatingSource; score: string; scale: number; count: number | null; label: string | null; url: string | null }[] | null;
+  review_quote: string | null;
+  review_attribution: string | null;
+  review_highlights: { label: string; score: string }[] | null;
+  review_highlights_note: string | null;
+  booking_image: string | null;
+  lodge_images: HomeFile[];
+  gallery: HomeFile[];
+  rooms_eyebrow: string | null;
+  rooms_title: string | null;
+  rooms_intro: string | null;
+  rates_eyebrow: string | null;
+  rates_title: string | null;
+  rates_intro: string | null;
+  rates_notes: { text: string }[] | null;
+  booking_eyebrow: string | null;
+  booking_title: string | null;
+  booking_steps: { title: string; text: string }[] | null;
+  cancellation_title: string | null;
+  cancellation_tiers: { value: string; label: string }[] | null;
+  cancellation_note: string | null;
+  good_to_know_title: string | null;
+  good_to_know: { icon: InfoIcon; text: string }[] | null;
+  lodge_eyebrow: string | null;
+  gallery_eyebrow: string | null;
+  gallery_title: string | null;
+  reviews_eyebrow: string | null;
+  faq_eyebrow: string | null;
+  faq_title: string | null;
+  faq_intro: string | null;
+  access_eyebrow: string | null;
+}
+
+export type InfoIcon = FactIcon | "age" | "no" | "group" | "card";
+
+export interface BookingForm {
+  id: number;
+  title: string | null;
+  intro: string | null;
+  dates_title: string | null;
+  dates_note: string | null;
+  room_title: string | null;
+  room_note: string | null;
+  contact_title: string | null;
+  message_placeholder: string | null;
+  submit_label: string | null;
+  reassurance: { text: string }[] | null;
+  success_title: string | null;
+  success_text: string | null;
+  online_title: string | null;
+  online_intro: string | null;
+  online_submit_label: string | null;
+  online_note: string | null;
+  online_reassurance: { text: string }[] | null;
+  none_available: string | null;
+  online_error: string | null;
+}
+
+export interface HomeFile {
+  id: number;
+  home_id: number;
+  directus_files_id: string;
+  sort: number | null;
+}
+
+export interface Season {
+  id: number;
+  status: Status;
+  sort: number | null;
+  name: string;
+  highlight: boolean;
+  periods: { from: string; to: string }[] | null; // "MM-DD"
+  periods_note: string | null;
+  price_double: number | null;
+  price_single: number | null;
+  min_nights: number | null;
+  min_nights_weekend: number | null;
+  long_stay_nights: number | null;
+  long_stay_discount: number | null;
+}
+
+export interface Faq {
+  id: number;
+  status: Status;
+  sort: number | null;
+  question: string;
+  answer: string | null;
 }
 
 export interface Page {
@@ -37,6 +141,9 @@ export interface Room {
   description: string | null;
   capacity: number | null;
   price_from: number | null;
+  bed: string | null;
+  features: string | null;
+  elloha_offer_id: string | null;
   cover: string | null;
   gallery: RoomFile[];
 }
@@ -67,6 +174,12 @@ interface Schema {
   rooms: Room[];
   rooms_files: RoomFile[];
   booking_requests: BookingRequest[];
+  home: Home;
+  home_lodge_images: HomeFile[];
+  home_gallery: HomeFile[];
+  seasons: Season[];
+  faq: Faq[];
+  booking_form: BookingForm;
 }
 
 // Client serveur uniquement (le token ne part jamais au navigateur)
@@ -75,6 +188,19 @@ export const directus = createDirectus<Schema>(DIRECTUS_URL)
   .with(rest());
 
 export { readItems, readSingleton };
+
+/**
+ * Textes alternatifs des images : description (sinon titre) saisie dans la médiathèque Directus.
+ * Une seule requête pour toutes les images de la page.
+ */
+export async function fileAlts(ids: (string | null | undefined)[]): Promise<Map<string, string>> {
+  const unique = [...new Set(ids.filter((id): id is string => !!id))];
+  if (!unique.length) return new Map();
+  const files = await directus
+    .request(readFiles({ filter: { id: { _in: unique } }, fields: ["id", "title", "description"] }))
+    .catch(() => []);
+  return new Map(files.map((f) => [f.id as string, ((f.description || f.title) ?? "") as string]));
+}
 
 /** URL publique d'un fichier Directus, avec transformations optionnelles. */
 export function assetUrl(
@@ -88,6 +214,12 @@ export function assetUrl(
   params.set("quality", String(opts.quality ?? 75));
   params.set("format", opts.format ?? "auto");
   return `${DIRECTUS_PUBLIC_URL}/assets/${id}?${params}`;
+}
+
+/** srcset prêt à l'emploi pour une image Directus. */
+export function srcset(id: string | null | undefined, widths: number[]) {
+  if (!id) return undefined;
+  return widths.map((w) => `${assetUrl(id, { width: w })} ${w}w`).join(", ");
 }
 
 /** Filtre "publié" commun à toutes les requêtes du site. */

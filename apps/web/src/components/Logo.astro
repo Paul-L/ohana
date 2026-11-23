@@ -1,0 +1,22 @@
+---
+import { Image } from "astro:assets";
+import Emblem from "@/components/Emblem.astro";
+import wordmark from "@/assets/ohana-wordmark.png";
+
+interface Props {
+  size?: "md" | "sm";
+}
+const { size = "md" } = Astro.props;
+---
+
+<a href="/" class="flex items-center gap-3 hover:text-ink" aria-label="Ohana Lodge, accueil">
+  <Emblem class:list={["w-auto", size === "md" ? "h-[34px]" : "h-7"]} />
+  <Image
+    src={wordmark}
+    alt=""
+    height={size === "md" ? 26 : 22}
+    densities={[1, 2]}
+    loading="eager"
+    class="w-auto"
+  />
+</a>

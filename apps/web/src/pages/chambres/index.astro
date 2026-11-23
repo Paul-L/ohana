@@ -1,18 +1,30 @@
 ---
 import Base from "@/layouts/Base.astro";
 import RoomCard from "@/components/RoomCard.astro";
-import { directus, readItems, published } from "@/lib/directus";
+import Lines from "@/components/Lines.astro";
+import { directus, readItems, readSingleton, published, fileAlts } from "@/lib/directus";
+import { editable } from "@/lib/visual-editing";
 
-const rooms = await directus.request(
-  readItems("rooms", { filter: published, sort: ["sort", "name"], fields: ["id", "slug", "name", "summary", "cover", "price_from"] }),
-);
+const ve = Astro.locals.visualEditing;
+const [rooms, seasons, home] = await Promise.all([
+  directus.request(
+    readItems("rooms", { filter: published, sort: ["sort", "name"], fields: ["id", "slug", "name", "cover", "price_from", "capacity", "bed", "features"] }),
+  ),
+  directus.request(readItems("seasons", { filter: published, fields: ["price_double"] })),
+  directus.request(readSingleton("home", { fields: ["id", "rooms_eyebrow", "rooms_title", "rooms_intro"] })).catch(() => null),
+]);
+const alts = await fileAlts(rooms.map((r) => r.cover));
+const edit = (field: string) => (home ? editable(ve, "home", home.id, field) : {});
+const min = Math.min(...seasons.map((s) => s.price_double ?? Infinity));
 ---
 
-<Base title="Chambres">
-  <section class="mx-auto max-w-5xl px-4 py-16">
-    <h1 class="text-4xl">Nos chambres</h1>
-    <div class="mt-10 grid gap-10 sm:grid-cols-2">
-      {rooms.map((room) => <RoomCard room={room} />)}
+<Base title="Chambres" description="Les 4 chambres d'hôtes d'Ohana Lodge à Moliets-et-Maâ : salle d'eau, terrasse privative, petit-déjeuner inclus.">
+  <section class="mx-auto max-w-[1240px] px-4 py-12 md:px-6 md:py-20">
+    <p class="eyebrow mb-2" {...edit("rooms_eyebrow")}>{home?.rooms_eyebrow}</p>
+    <h1 class="title-xl" {...edit("rooms_title")}><Lines text={home?.rooms_title ?? "Les chambres"} /></h1>
+    {home?.rooms_intro && <p class="mt-4 max-w-[560px] text-muted" {...edit("rooms_intro")}>{home.rooms_intro}</p>}
+    <div class="mt-10 grid gap-x-6 gap-y-12 sm:grid-cols-2 lg:grid-cols-4">
+      {rooms.map((room) => <RoomCard room={room} alt={alts.get(room.cover ?? "")} fallbackPrice={Number.isFinite(min) ? min : null} />)}
     </div>
   </section>
 </Base>

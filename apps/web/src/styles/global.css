@@ -1,35 +1,79 @@
 @import "tailwindcss";
 
-/* Design tokens Ohana — épuré, minimaliste, tons sable / océan */
-@theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-serif: "Fraunces", ui-serif, Georgia, serif;
+/* Design tokens Ohana — maquette « refonte site » (sobre, sable / noir) */
+@theme inline {
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-display: var(--font-inter-tight), system-ui, sans-serif;
+}
 
-  --color-sand-50: #faf8f4;
-  --color-sand-100: #f2ede3;
-  --color-sand-300: #ddd2bd;
-  --color-ink: #1f2a2e;
-  --color-ocean: #2f5d62;
-  --color-ocean-dark: #234649;
+@theme {
+  --color-paper: #f7f5f0; /* fond */
+  --color-sand: #ede7dc; /* sections alternées */
+  --color-sand-line: #d3cbbc;
+  --color-line: #e2ded5; /* bordures */
+  --color-field: #d9d4c9; /* bordures de champs */
+  --color-stone: #b5b0a6;
+  --color-muted: #5c615b; /* texte secondaire */
+  --color-body: #3e433d; /* texte courant secondaire */
+  --color-ink: #1d201d; /* texte principal */
+  --color-night: #111111; /* noir CTA / bandeau */
+  --color-night-line: #3a3e3a;
+  --color-mist: #c9c5bc; /* texte secondaire sur fond sombre */
+  --color-cloud: #e9e6df; /* texte sur fond sombre */
+  --color-clay: #5f5b54;
+  --color-star: #e8a33d;
+  --color-warn-bg: #f6e9df;
+  --color-warn: #6b3416;
 }
 
 @layer base {
   html {
-    @apply bg-sand-50 text-ink antialiased;
+    @apply bg-paper text-ink antialiased;
     font-family: var(--font-sans);
+    line-height: 1.6;
+    scroll-behavior: smooth;
+    /* Compense le header collant lors des ancres */
+    scroll-padding-top: 5rem;
   }
-  h1, h2, h3 {
-    font-family: var(--font-serif);
-    @apply tracking-tight;
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
   }
   :focus-visible {
-    @apply outline-2 outline-offset-2 outline-ocean;
+    @apply outline-2 outline-offset-2 outline-night;
   }
+  a:hover { @apply text-muted; }
+}
+
+@layer components {
+  /* Petit sur-titre en capitales */
+  .eyebrow { @apply text-[13px] font-medium uppercase tracking-[0.14em] text-muted; }
+  /* Titre de section */
+  .title-xl {
+    font-family: var(--font-display);
+    @apply font-light leading-[1.1] tracking-[-0.015em];
+    font-size: clamp(32px, 3.6vw, 48px);
+  }
+  .field {
+    @apply h-12 w-full min-w-0 rounded-[10px] border border-field bg-white px-3 text-base text-ink;
+  }
+  .label { @apply flex flex-col gap-1.5 text-[13px] font-medium text-muted; }
+  .btn-dark { @apply inline-flex min-h-11 items-center justify-center rounded-full bg-night px-[22px] font-semibold text-white hover:bg-ink hover:text-white; }
+  .btn-outline { @apply inline-flex min-h-11 items-center justify-center rounded-full border border-ink px-5 font-semibold; }
+  .link-arrow { @apply inline-flex min-h-11 items-center self-start font-semibold underline underline-offset-4; }
+}
+
+/* Apparition au défilement, sans JS (navigateurs compatibles uniquement) */
+@keyframes ohana-reveal { from { opacity: 0; transform: translateY(28px); } to { opacity: 1; transform: none; } }
+@supports (animation-timeline: view()) {
+  .reveal { animation: ohana-reveal linear both; animation-timeline: view(); animation-range: entry 0% entry 35%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { animation: none; }
 }
 
 /* Contenu riche saisi dans Directus (WYSIWYG) */
 .prose-ohana :where(p) { @apply my-4 leading-relaxed; }
-.prose-ohana :where(h2) { @apply mt-10 mb-4 text-2xl; }
-.prose-ohana :where(h3) { @apply mt-8 mb-3 text-xl; }
+.prose-ohana :where(h2) { @apply mt-10 mb-4 text-2xl font-light; font-family: var(--font-display); }
+.prose-ohana :where(h3) { @apply mt-8 mb-3 text-xl font-medium; font-family: var(--font-display); }
 .prose-ohana :where(ul) { @apply my-4 list-disc pl-6; }
-.prose-ohana :where(a) { @apply text-ocean underline underline-offset-4; }
+.prose-ohana :where(a) { @apply underline underline-offset-4; }
