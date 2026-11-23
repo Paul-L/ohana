@@ -13,6 +13,9 @@ export default defineConfig({
   output: "server",
   adapter: node({ mode: "standalone" }),
 
+  // Ancienne page de réservation, remplacée par le widget Elloha de l'accueil
+  redirects: { "/reserver": "/#reserver" },
+
   i18n: { defaultLocale: "fr", locales: ["fr"] },
   integrations: [sitemap()],
 
@@ -47,16 +50,10 @@ export default defineConfig({
     schema: {
       DIRECTUS_URL: envField.string({ context: "server", access: "secret" }),
       DIRECTUS_PUBLIC_URL: envField.string({ context: "server", access: "public", default: "http://localhost:8055" }),
+      // Hôte dédié aux images (ex. https://media.ohanalodge.com) : même Directus, mais le navigateur n'y envoie
+      // jamais le cookie de session de l'admin (un cookie périmé fait répondre 401 à /assets). Vide = DIRECTUS_PUBLIC_URL.
+      DIRECTUS_ASSETS_URL: envField.string({ context: "server", access: "public", optional: true }),
       DIRECTUS_WEB_TOKEN: envField.string({ context: "server", access: "secret" }),
-      RESEND_API_KEY: envField.string({ context: "server", access: "secret" }),
-      MAIL_FROM: envField.string({ context: "server", access: "secret" }),
-      PUBLIC_TURNSTILE_SITE_KEY: envField.string({ context: "server", access: "public", default: "1x00000000000000000000AA" }),
-      TURNSTILE_SECRET_KEY: envField.string({ context: "server", access: "secret" }),
-      // Elloha (disponibilités + paiement en ligne). Vides = la page de réservation reste en mode « demande ».
-      ELLOHA_API_URL: envField.string({ context: "server", access: "secret", default: "https://api.elloha.com" }),
-      ELLOHA_CLIENT_ID: envField.string({ context: "server", access: "secret", optional: true }),
-      ELLOHA_BOOKING_ENGINE_ID: envField.string({ context: "server", access: "secret", optional: true }),
-      ELLOHA_PRODUCT_ID: envField.string({ context: "server", access: "secret", optional: true }),
     },
   },
 

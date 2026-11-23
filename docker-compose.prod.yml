@@ -61,7 +61,7 @@ services:
       # Variables publiques astro:env, figées au build
       args:
         DIRECTUS_PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
-        PUBLIC_TURNSTILE_SITE_KEY: ${PUBLIC_TURNSTILE_SITE_KEY}
+        DIRECTUS_ASSETS_URL: ${DIRECTUS_ASSETS_URL}
     restart: unless-stopped
     depends_on:
       - directus
@@ -74,14 +74,12 @@ services:
       DIRECTUS_URL: http://directus:8055
       DIRECTUS_PUBLIC_URL: ${DIRECTUS_PUBLIC_URL}
       DIRECTUS_WEB_TOKEN: ${DIRECTUS_WEB_TOKEN}
-      RESEND_API_KEY: ${RESEND_API_KEY}
-      MAIL_FROM: ${MAIL_FROM}
-      PUBLIC_TURNSTILE_SITE_KEY: ${PUBLIC_TURNSTILE_SITE_KEY}
-      TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY}
-      # Elloha : vides = /reserver reste en mode « demande »
-      ELLOHA_CLIENT_ID: ${ELLOHA_CLIENT_ID}
-      ELLOHA_BOOKING_ENGINE_ID: ${ELLOHA_BOOKING_ENGINE_ID}
-      ELLOHA_PRODUCT_ID: ${ELLOHA_PRODUCT_ID}
+      # Synchro des avis Google (tâche planifiée : node scripts/sync-reviews.ts)
+      DIRECTUS_SYNC_TOKEN: ${DIRECTUS_SYNC_TOKEN}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REFRESH_TOKEN: ${GOOGLE_REFRESH_TOKEN}
+      GOOGLE_LOCATION: ${GOOGLE_LOCATION}
 
 volumes:
   pgdata:

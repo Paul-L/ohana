@@ -1,5 +1,5 @@
 import { createDirectus, rest, staticToken, readItems, readSingleton, readFiles } from "@directus/sdk";
-import { DIRECTUS_URL, DIRECTUS_PUBLIC_URL, DIRECTUS_WEB_TOKEN } from "astro:env/server";
+import { DIRECTUS_URL, DIRECTUS_PUBLIC_URL, DIRECTUS_ASSETS_URL, DIRECTUS_WEB_TOKEN } from "astro:env/server";
 
 // ---------- Types (miroir du schéma créé par scripts/bootstrap-directus.ts) ----------
 export type Status = "draft" | "published" | "archived";
@@ -10,7 +10,6 @@ export interface Settings {
   tagline: string | null;
   seo_description: string | null;
   contact_email: string | null;
-  notification_email: string | null;
   phone: string | null;
   address: string | null;
   hero_image: string | null;
@@ -36,6 +35,8 @@ export interface Home {
   review_attribution: string | null;
   review_highlights: { label: string; score: string }[] | null;
   review_highlights_note: string | null;
+  ratings_checked_on: string | null; // "AAAA-MM-JJ" : relevé manuel Booking / Tripadvisor
+  ratings_synced_at: string | null; // dernière synchro automatique de la note Google
   booking_image: string | null;
   lodge_images: HomeFile[];
   gallery: HomeFile[];
@@ -65,29 +66,6 @@ export interface Home {
 }
 
 export type InfoIcon = FactIcon | "age" | "no" | "group" | "card";
-
-export interface BookingForm {
-  id: number;
-  title: string | null;
-  intro: string | null;
-  dates_title: string | null;
-  dates_note: string | null;
-  room_title: string | null;
-  room_note: string | null;
-  contact_title: string | null;
-  message_placeholder: string | null;
-  submit_label: string | null;
-  reassurance: { text: string }[] | null;
-  success_title: string | null;
-  success_text: string | null;
-  online_title: string | null;
-  online_intro: string | null;
-  online_submit_label: string | null;
-  online_note: string | null;
-  online_reassurance: { text: string }[] | null;
-  none_available: string | null;
-  online_error: string | null;
-}
 
 export interface HomeFile {
   id: number;
@@ -143,7 +121,6 @@ export interface Room {
   price_from: number | null;
   bed: string | null;
   features: string | null;
-  elloha_offer_id: string | null;
   cover: string | null;
   gallery: RoomFile[];
 }
@@ -154,18 +131,17 @@ export interface RoomFile {
   directus_files_id: string;
 }
 
-export interface BookingRequest {
+/** Avis Google synchronisés chaque nuit (apps/web/scripts/sync-reviews.ts). Ne jamais modifier le texte (règles Google). */
+export interface Review {
   id: number;
-  status: "new" | "answered" | "confirmed" | "declined";
-  date_created: string;
-  name: string;
-  email: string;
-  phone: string | null;
-  room: number | Room | null;
-  arrival: string;
-  departure: string;
-  guests: number;
-  message: string | null;
+  visible: boolean;
+  source: "google";
+  external_id: string;
+  rating: number; // 1 à 5
+  author: string | null;
+  published_at: "datetime" | null; // "datetime" : type date du SDK Directus (permet les filtres _gte…)
+  text: string | null;
+  synced_at: "datetime";
 }
 
 interface Schema {
@@ -173,13 +149,12 @@ interface Schema {
   pages: Page[];
   rooms: Room[];
   rooms_files: RoomFile[];
-  booking_requests: BookingRequest[];
   home: Home;
   home_lodge_images: HomeFile[];
   home_gallery: HomeFile[];
   seasons: Season[];
   faq: Faq[];
-  booking_form: BookingForm;
+  reviews: Review[];
 }
 
 // Client serveur uniquement (le token ne part jamais au navigateur)
@@ -213,7 +188,7 @@ export function assetUrl(
   if (opts.height) params.set("height", String(opts.height));
   params.set("quality", String(opts.quality ?? 75));
   params.set("format", opts.format ?? "auto");
-  return `${DIRECTUS_PUBLIC_URL}/assets/${id}?${params}`;
+  return `${DIRECTUS_ASSETS_URL || DIRECTUS_PUBLIC_URL}/assets/${id}?${params}`;
 }
 
 /** srcset prêt à l'emploi pour une image Directus. */

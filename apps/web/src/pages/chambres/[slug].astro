@@ -58,8 +58,8 @@ const facts = [room.capacity && `Jusqu'à ${room.capacity} personnes`, room.bed 
         <ul class="flex flex-col gap-1.5 text-[15px] text-body">
           {facts.map((f) => <li>— {f}</li>)}
         </ul>
-        <a href={`/reserver?chambre=${room.id}`} class="flex min-h-12 items-center justify-center rounded-[10px] bg-night font-semibold text-white hover:text-white">
-          Demander une réservation
+        <a href="/#reserver" class="flex min-h-12 items-center justify-center rounded-[10px] bg-night font-semibold text-white hover:text-white">
+          Voir les disponibilités
         </a>
       </aside>
     </div>

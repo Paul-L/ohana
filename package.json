@@ -11,11 +11,12 @@
     "build": "pnpm --filter web build",
     "check": "pnpm --filter web check",
     "check:contrast": "node --env-file=.env scripts/check-hero-contrast.ts",
+    "reviews:sync": "node --env-file=.env scripts/sync-reviews.ts",
+    "google:auth": "node --env-file=.env scripts/google-auth.ts",
     "cms:up": "docker compose up -d",
     "cms:down": "docker compose down",
     "cms:logs": "docker compose logs -f directus",
     "cms:bootstrap": "node --env-file=.env scripts/bootstrap-directus.ts",
-    "elloha:offres": "node --env-file=.env scripts/elloha-offres.ts",
     "cms:snapshot": "docker compose exec directus npx directus schema snapshot --yes /directus/snapshots/schema.yaml",
     "cms:apply": "docker compose exec directus npx directus schema apply --yes /directus/snapshots/schema.yaml",
     "db:backup": "mkdir -p backups && docker compose exec -T postgres pg_dump -U directus -Fc directus > backups/directus-$(date +%Y%m%d-%H%M).dump"

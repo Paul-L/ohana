@@ -11,7 +11,7 @@ COPY apps/web apps/web
 # Variables astro:env « public » : figées dans le bundle AU BUILD (pas lues au runtime).
 # Les secrets (access: "secret") restent lus au démarrage du conteneur.
 ARG DIRECTUS_PUBLIC_URL
-ARG PUBLIC_TURNSTILE_SITE_KEY
+ARG DIRECTUS_ASSETS_URL
 RUN pnpm --filter web build
 
 FROM base AS deps
@@ -25,6 +25,8 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=4321
 COPY --from=deps /app/node_modules /app/node_modules
 COPY --from=deps /app/apps/web/node_modules ./node_modules
 COPY --from=build /app/apps/web/dist ./dist
+# Synchro nocturne des avis Google (tâche planifiée Coolify : node scripts/sync-reviews.ts)
+COPY scripts/sync-reviews.ts ./scripts/
 USER node
 EXPOSE 4321
 CMD ["node", "dist/server/entry.mjs"]

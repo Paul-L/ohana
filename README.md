@@ -1,6 +1,6 @@
 # Ohana Lodge — site web
 
-Astro 7 (SSR Node) + Directus 12 (auto-hébergé, Postgres) + Resend.
+Astro 7 (SSR Node) + Directus 12 (auto-hébergé, Postgres) + widget de réservation Elloha.
 Objectif : site rapide, mobile-first, optimisé SEO/GEO, administrable visuellement par la propriétaire.
 
 ## Démarrage (dev)
@@ -23,8 +23,8 @@ pnpm dev                      # site → http://localhost:4321
 apps/web/                 Site Astro
   src/lib/directus.ts     Client + types du schéma (à tenir à jour avec le bootstrap)
   src/lib/visual-editing.ts  Attributs data-directus (seulement en mode édition)
-  src/actions/            Formulaire de demande de réservation (Turnstile + Directus + Resend)
-  src/pages/              accueil, chambres, [slug] (pages libres), reserver
+  src/components/EllohaWidget.astro  Barre de réservation Elloha (widget officiel, habillé à notre charte)
+  src/pages/              accueil, chambres, [slug] (pages libres)
 directus/
   extensions/             Extensions Directus (versionnées)
   snapshots/              Snapshot du schéma (pnpm cms:snapshot)
@@ -38,12 +38,13 @@ docker-compose.prod.yml   Prod Coolify (Postgres + Directus + web)
 
 | Collection | Rôle |
 |---|---|
-| `settings` (singleton) | Nom, accroche, coordonnées, photo d'accueil, email de notification |
+| `settings` (singleton) | Nom, accroche, coordonnées, photo d'accueil, infos séjour |
 | `pages` | Accueil (`slug = accueil`) + pages libres (à propos, mentions légales…) |
 | `rooms` (+ `rooms_files`) | Chambres, photo principale, galerie |
-| `booking_requests` | Demandes reçues par le formulaire |
+| `home`, `seasons`, `faq` | Textes de l'accueil, tarifs, questions fréquentes |
+| `reviews` | Avis Google, importés chaque nuit (la propriétaire peut en masquer) |
 
-Rôles : **Propriétaire** (contenu + demandes, pas de réglages techniques), **Site web** (token statique du serveur Astro).
+Rôles : **Propriétaire** (contenu, pas de réglages techniques), **Site web** (token statique du serveur Astro).
 
 > Directus 12 en licence gratuite n'autorise pas les permissions filtrées ni par champ :
 > le filtre « publié » est donc appliqué dans les requêtes du site (`published` dans `lib/directus.ts`).
@@ -57,6 +58,8 @@ Rôles : **Propriétaire** (contenu + demandes, pas de réglages techniques), **
 | `pnpm cms:bootstrap` | (Re)applique schéma + permissions |
 | `pnpm cms:snapshot` / `cms:apply` | Exporte / applique le schéma Directus (YAML versionné) |
 | `pnpm db:backup` | Dump Postgres dans `backups/` |
+| `pnpm reviews:sync` | Synchronise les avis Google (lancé chaque nuit en production) |
+| `pnpm google:auth` | Autorisation unique de l'accès aux avis Google |
 
 ## Déploiement (Coolify)
 
@@ -67,7 +70,41 @@ Rôles : **Propriétaire** (contenu + demandes, pas de réglages techniques), **
 5. Créer l'utilisateur de la propriétaire (rôle **Propriétaire**) dans Directus.
 6. Sauvegardes : activer les backups Postgres planifiés de Coolify + le volume `uploads`.
 
-## Emails
+## Réservation (Elloha)
 
-Resend : vérifier le domaine d'envoi (SPF/DKIM) avant la mise en prod. Turnstile : créer un widget Cloudflare
-pour le domaine et remplacer les clés de test.
+La barre de réservation de l'accueil (`#reserver`) est le widget officiel Elloha : le script Elloha injecte son
+formulaire dans la page, puis ouvre le moteur Elloha (disponibilités, paiement) dans un nouvel onglet.
+Ses feuilles de style sont neutralisées et remplacées par les nôtres (`EllohaWidget.astro`). Si le code
+d'intégration change dans le back-office Elloha, reporter les identifiants (`WIDGET_ID`, `ESTABLISHMENT_ID`) dans ce composant.
+Les disponibilités, prix et couleurs du moteur lui-même se règlent dans le back-office Elloha.
+
+## Notes et avis
+
+- **Google** : note, nombre d'avis et 50 derniers avis importés chaque nuit par `scripts/sync-reviews.ts`
+  (Business Profile API, accès propriétaire). Le site affiche les 6 plus récents notés 4 ou 5 étoiles.
+- **Booking et Tripadvisor** : notes saisies à la main dans Directus (Accueil › Avis), avec la date du relevé
+  (« Notes Booking/Tripadvisor relevées le »). Leurs pages refusent la lecture automatique et l'API Tripadvisor
+  interdit de stocker ou de trier ses avis.
+- Règles Google à respecter : avis conservés 30 jours au plus après leur dernière synchronisation (le site ignore
+  les plus anciens si la synchro s'arrête), texte jamais modifié. Mention légale sous les avis (Code de la consommation,
+  art. L111-7-2) : critères de sélection et absence de vérification.
+
+### Mise en place de la synchro Google (une fois)
+
+1. Prérequis Google : fiche de l'établissement validée depuis plus de 60 jours, avec le site renseigné.
+2. [Google Cloud](https://console.cloud.google.com) : créer un projet et noter son **numéro**.
+3. Demander l'accès : [formulaire Business Profile API](https://support.google.com/business/contact/api_default) ›
+   « Application for Basic API Access », avec le numéro de projet et l'e-mail propriétaire de la fiche.
+   Accès accordé quand le quota de « Google My Business API » passe de 0 à 300 requêtes/minute.
+4. Activer les API : Google My Business API, My Business Account Management API, My Business Business Information API.
+5. Écran de consentement OAuth : type « Externe », ajouter le scope `https://www.googleapis.com/auth/business.manage`,
+   puis **publier l'application (« En production »)** : en mode test, l'autorisation expire au bout de 7 jours.
+6. Identifiants › ID client OAuth › « Application de bureau » → `GOOGLE_CLIENT_ID` et `GOOGLE_CLIENT_SECRET` dans `.env`.
+7. `pnpm google:auth` : la propriétaire se connecte avec le compte qui gère la fiche (Google signale une application
+   non validée : « Paramètres avancés › Continuer »). Reporter `GOOGLE_REFRESH_TOKEN` et `GOOGLE_LOCATION` dans `.env`.
+8. `DIRECTUS_SYNC_TOKEN` (`openssl rand -hex 32`) dans `.env`, puis `pnpm cms:bootstrap` (crée l'utilisateur « Synchro avis »).
+9. Tester : `pnpm reviews:sync`.
+10. Production : reporter les 5 variables dans Coolify, relancer le bootstrap contre la prod, puis ajouter une
+    **tâche planifiée** sur le service `web` : commande `node scripts/sync-reviews.ts`, fréquence `0 4 * * *`.
+11. Dans Directus (Accueil › Avis › Notes › Google), renseigner le lien vers les avis Google de la fiche.
+

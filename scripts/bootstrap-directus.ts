@@ -12,6 +12,8 @@ const SITE_URL = process.env.SITE_URL ?? "http://localhost:4321";
 const ADMIN_EMAIL = must("DIRECTUS_ADMIN_EMAIL");
 const ADMIN_PASSWORD = must("DIRECTUS_ADMIN_PASSWORD");
 const WEB_TOKEN = must("DIRECTUS_WEB_TOKEN");
+// Token de l'utilisateur technique qui synchronise les avis Google (facultatif : sans lui, pas de synchro)
+const SYNC_TOKEN = process.env.DIRECTUS_SYNC_TOKEN || null;
 
 function must(name: string): string {
   const v = process.env[name];
@@ -176,7 +178,6 @@ async function schema() {
       f.text("seo_description", "Description pour Google et les IA (150 caractères environ)"),
       f.image("hero_image", "Grande photo de la page d'accueil"),
       f.string("contact_email", "Email affiché sur le site", { width: "half" }),
-      f.string("notification_email", "Email qui reçoit les demandes de réservation", { width: "half" }),
       f.string("phone", undefined, { width: "half" }),
       f.text("address"),
     ],
@@ -239,46 +240,6 @@ async function schema() {
     schema: { on_delete: "CASCADE" },
   });
 
-  await ensureCollection(
-    "booking_requests",
-    {
-      icon: "event_available",
-      display_template: "{{name}} — {{arrival}}",
-      sort_field: null,
-      translations: [{ language: "fr-FR", translation: "Demandes de réservation" }],
-      note: "Demandes reçues via le formulaire du site",
-    },
-    [
-      f.id(),
-      {
-        field: "status",
-        type: "string",
-        schema: { default_value: "new", is_nullable: false },
-        meta: {
-          interface: "select-dropdown",
-          display: "labels",
-          width: "half",
-          options: { choices: [
-            { text: "Nouvelle", value: "new", color: "#e8a23b" },
-            { text: "Répondue", value: "answered", color: "#3b82f6" },
-            { text: "Confirmée", value: "confirmed", color: "#2f5d62" },
-            { text: "Refusée", value: "declined", color: "#a2a2a2" },
-          ] },
-        },
-      },
-      f.dateCreated(),
-      f.string("name", undefined, { width: "half" }),
-      f.string("email", undefined, { width: "half" }),
-      f.string("phone", undefined, { width: "half" }),
-      { field: "room", type: "integer", meta: { interface: "select-dropdown-m2o", width: "half", options: { template: "{{name}}" } } },
-      f.date("arrival"),
-      f.date("departure"),
-      f.int("guests"),
-      f.text("message"),
-    ],
-  );
-  await ensureRelation({ collection: "booking_requests", field: "room", related_collection: "rooms", schema: { on_delete: "SET NULL" } });
-
   // --- Refonte (maquette 2026-11) : ajouts uniquement ---
 
   for (const field of [
@@ -295,7 +256,6 @@ async function schema() {
   for (const field of [
     f.string("bed", "Literie, ex. 180 × 200", { width: "half" }),
     f.string("features", "Atout court, ex. terrasse privative", { width: "half" }),
-    f.string("elloha_offer_id", "Identifiant de la chambre dans Elloha (liste : pnpm elloha:offres). Vide = chambre non réservable en ligne", { width: "half" }),
   ]) await ensureField("rooms", field);
 
   await ensureCollection(
@@ -398,35 +358,35 @@ async function schema() {
     f.string("access_eyebrow"),
   ]) await ensureField("home", field);
 
+  // --- Avis Google synchronisés chaque nuit (apps/web/scripts/sync-reviews.ts) ---
+  const ro = (field: Field): Field => ({ ...field, meta: { ...field.meta, readonly: true } });
+  for (const field of [
+    ro({ field: "ratings_synced_at", type: "timestamp", meta: { interface: "datetime", width: "half", note: "Note Google mise à jour automatiquement chaque nuit" } }),
+    { field: "ratings_checked_on", type: "date", meta: { interface: "datetime", width: "half", note: "Date du dernier relevé des notes Booking et Tripadvisor (affichée sur le site)" } },
+  ]) await ensureField("home", field);
+
   await ensureCollection(
-    "booking_form",
-    { singleton: true, icon: "edit_calendar", translations: [{ language: "fr-FR", translation: "Page de réservation" }], note: "Textes du formulaire de demande de réservation" },
+    "reviews",
+    {
+      icon: "reviews",
+      display_template: "{{author}} · {{rating}}/5",
+      sort_field: null,
+      translations: [{ language: "fr-FR", translation: "Avis Google" }],
+      note: "Importés automatiquement chaque nuit depuis Google. Décochez « Afficher » pour retirer un avis du site. Règles Google : un avis n'est conservé que 30 jours après sa dernière synchronisation et ne doit pas être modifié.",
+    },
     [
       f.id(),
-      f.string("title"),
-      f.text("intro"),
-      f.string("dates_title"),
-      f.text("dates_note"),
-      f.string("room_title"),
-      f.text("room_note"),
-      f.string("contact_title"),
-      f.string("message_placeholder", "Texte d'exemple grisé dans le champ message"),
-      f.string("submit_label", "Texte du bouton d'envoi"),
-      f.repeater("reassurance", "Petites lignes ✓ sous le bouton", "{{text}}", [input("text", "Texte", "full")]),
-      f.string("success_title"),
-      f.text("success_text"),
+      { field: "visible", type: "boolean", schema: { default_value: true }, meta: { interface: "boolean", width: "half", note: "Afficher sur le site (avis de 4 et 5 étoiles uniquement)" } },
+      ro(f.int("rating", "Note sur 5")),
+      ro(f.string("author", undefined, { width: "half" })),
+      ro({ field: "published_at", type: "timestamp", meta: { interface: "datetime", width: "half", display: "datetime" } }),
+      ro(f.text("text")),
+      ro({ field: "source", type: "string", schema: { default_value: "google" }, meta: { interface: "input", width: "half", hidden: true } }),
+      ro({ field: "external_id", type: "string", schema: { is_unique: true }, meta: { interface: "input", hidden: true } }),
+      ro({ field: "synced_at", type: "timestamp", meta: { interface: "datetime", width: "half", note: "Dernière synchronisation" } }),
     ],
   );
-  // Textes du mode « réservation en ligne » (Elloha configuré)
-  for (const field of [
-    f.string("online_title", "Remplace le titre quand la réservation en ligne est active"),
-    f.text("online_intro", "Remplace l'introduction quand la réservation en ligne est active"),
-    f.string("online_submit_label", "Bouton qui mène au paiement"),
-    f.text("online_note", "Petite ligne sous le bouton de paiement"),
-    f.repeater("online_reassurance", "Petites lignes ✓ sous le bouton (réservation en ligne)", "{{text}}", [input("text", "Texte", "full")]),
-    f.text("none_available", "Message si aucune chambre n'est libre aux dates choisies"),
-    f.text("online_error", "Message si la réservation en ligne ne répond pas (le formulaire de demande prend le relais)"),
-  ]) await ensureField("booking_form", field);
+
 }
 
 // ---------------------------------------------------------------- Présentation du back-office
@@ -497,36 +457,21 @@ async function backOffice() {
       [
         ["reviews_eyebrow", "Sur-titre"], ["ratings", "Notes"], ["review_quote", "Extrait d'avis"], ["review_attribution", "Auteur de l'avis"],
         ["review_highlights", "Notes détaillées"], ["review_highlights_note", "Source des notes détaillées"],
+        ["ratings_checked_on", "Notes Booking/Tripadvisor relevées le"], ["ratings_synced_at", "Note Google mise à jour le"],
       ],
     ],
     ["Infos pratiques", [["faq_eyebrow", "Sur-titre"], ["faq_title", "Titre"], ["faq_intro", "Phrase d'introduction"]]],
     ["Accès", [["access_eyebrow", "Sur-titre"]]],
   ]);
 
-  await arrange("booking_form", [
-    ["En-tête", [["title", "Titre"], ["intro", "Introduction"]]],
-    ["Étape 1 : dates", [["dates_title", "Titre"], ["dates_note", "Précision"]]],
-    ["Étape 2 : chambre", [["room_title", "Titre"], ["room_note", "Précision"]]],
-    ["Étape 3 : coordonnées", [["contact_title", "Titre"], ["message_placeholder", "Exemple de message"]]],
-    ["Récapitulatif", [["submit_label", "Bouton d'envoi"], ["reassurance", "Arguments"]]],
-    ["Confirmation", [["success_title", "Titre"], ["success_text", "Texte"]]],
-    [
-      "Réservation en ligne (Elloha)",
-      [
-        ["online_title", "Titre"], ["online_intro", "Introduction"], ["online_submit_label", "Bouton de paiement"], ["online_note", "Précision sous le bouton"],
-        ["online_reassurance", "Arguments"], ["none_available", "Message « complet »"], ["online_error", "Message si indisponible"],
-      ],
-    ],
-  ]);
-
   await arrange("settings", [
     ["", [["site_name", "Nom du lodge"], ["tagline", "Grand titre de l'accueil"], ["hero_image", "Photo d'accueil"], ["seo_description", "Description (Google et IA)"]]],
-    ["Coordonnées", [["address", "Adresse"], ["phone", "Téléphone"], ["contact_email", "E-mail affiché"], ["notification_email", "E-mail qui reçoit les demandes"], ["instagram_url", "Instagram"], ["latitude", "Latitude"], ["longitude", "Longitude"]]],
+    ["Coordonnées", [["address", "Adresse"], ["phone", "Téléphone"], ["contact_email", "E-mail affiché"], ["instagram_url", "Instagram"], ["latitude", "Latitude"], ["longitude", "Longitude"]]],
     ["Séjour", [["checkin_from", "Accueil à partir de"], ["checkin_to", "Accueil jusqu'à"], ["checkout_until", "Départ au plus tard"], ["tourist_tax", "Taxe de séjour (€/nuit/pers.)"], ["deposit_percent", "Acompte (%)"]]],
   ]);
 
   await arrange("rooms", [
-    ["", [["status", "Statut"], ["name", "Nom"], ["slug", "Adresse de la page"], ["summary", "Résumé"], ["description", "Description"], ["capacity", "Personnes max."], ["price_from", "Prix à partir de (€/nuit)"], ["bed", "Literie"], ["features", "Atout"], ["cover", "Photo principale"], ["gallery", "Autres photos"], ["elloha_offer_id", "Identifiant Elloha"]]],
+    ["", [["status", "Statut"], ["name", "Nom"], ["slug", "Adresse de la page"], ["summary", "Résumé"], ["description", "Description"], ["capacity", "Personnes max."], ["price_from", "Prix à partir de (€/nuit)"], ["bed", "Literie"], ["features", "Atout"], ["cover", "Photo principale"], ["gallery", "Autres photos"]]],
   ]);
 
   await arrange("seasons", [
@@ -534,6 +479,9 @@ async function backOffice() {
   ]);
 
   await arrange("faq", [["", [["status", "Statut"], ["question", "Question"], ["answer", "Réponse"]]]]);
+  await arrange("reviews", [
+    ["", [["visible", "Afficher"], ["rating", "Note"], ["author", "Auteur"], ["published_at", "Publié le"], ["text", "Avis"], ["synced_at", "Synchronisé le"]]],
+  ]);
 
   await arrange("pages", [
     ["", [["status", "Statut"], ["title", "Titre"], ["slug", "Adresse de la page"], ["intro", "Chapeau"], ["content", "Contenu"], ["cover", "Image"], ["seo_description", "Description (Google et IA)"]]],
@@ -575,7 +523,7 @@ async function access() {
   const [pub] = await api<{ id: string }[]>("GET", `/policies?filter[name][_eq]=${encodeURIComponent("$t:public_label")}&fields=id`);
   await syncPermissions(pub.id, [{ collection: "directus_files", action: "read" }]);
 
-  // Serveur Astro (token statique) : lecture du contenu publié + création des demandes
+  // Serveur Astro (token statique) : lecture du contenu publié
   const webPolicy = await ensurePolicy("Site web", { icon: "public", app_access: false, admin_access: false }, [
     { collection: "settings", action: "read" },
     // NB : Directus 12 (licence gratuite) refuse les permissions personnalisées
@@ -589,9 +537,8 @@ async function access() {
     { collection: "home_gallery", action: "read" },
     { collection: "seasons", action: "read" },
     { collection: "faq", action: "read" },
-    { collection: "booking_form", action: "read" },
+    { collection: "reviews", action: "read" },
     { collection: "directus_files", action: "read" },
-    { collection: "booking_requests", action: "create" },
   ]);
   const webRole = await ensureRole("Site web", webPolicy, "public");
 
@@ -603,7 +550,7 @@ async function access() {
     await api("PATCH", `/users/${webUser.id}`, { token: WEB_TOKEN });
   }
 
-  // Propriétaire : gère tout le contenu + consulte/traite les demandes, sans accès aux réglages techniques
+  // Propriétaire : gère tout le contenu, sans accès aux réglages techniques
   const ownerPolicy = await ensurePolicy("Propriétaire", { icon: "home", app_access: true, admin_access: false, enforce_tfa: false }, [
     { collection: "settings", action: "read" },
     { collection: "settings", action: "update" },
@@ -616,14 +563,32 @@ async function access() {
     ...crud("home_gallery"),
     ...crud("seasons"),
     ...crud("faq"),
-    { collection: "booking_form", action: "read" },
-    { collection: "booking_form", action: "update" },
+    { collection: "reviews", action: "read" },
+    { collection: "reviews", action: "update" },
+    { collection: "reviews", action: "delete" },
     ...crud("directus_files"),
     { collection: "directus_folders", action: "read" },
-    { collection: "booking_requests", action: "read" },
-    { collection: "booking_requests", action: "update" },
   ]);
   await ensureRole("Propriétaire", ownerPolicy, "home");
+
+  // Synchro des avis Google (tâche planifiée) : écrit les avis et la note Google, rien d'autre
+  const syncPolicy = await ensurePolicy("Synchro avis", { icon: "sync", app_access: false, admin_access: false }, [
+    ...crud("reviews"),
+    { collection: "home", action: "read" },
+    { collection: "home", action: "update" },
+  ]);
+  const syncRole = await ensureRole("Synchro avis", syncPolicy, "sync");
+  if (SYNC_TOKEN) {
+    const [syncUser] = await api<{ id: string }[]>("GET", "/users?filter[email][_eq]=synchro-avis@example.org&fields=id");
+    if (!syncUser) {
+      await api("POST", "/users", { first_name: "Synchro avis", email: "synchro-avis@example.org", role: syncRole, token: SYNC_TOKEN, status: "active" });
+      console.log("+ utilisateur technique synchro-avis");
+    } else {
+      await api("PATCH", `/users/${syncUser.id}`, { token: SYNC_TOKEN });
+    }
+  } else {
+    console.log("· DIRECTUS_SYNC_TOKEN absent : utilisateur de synchro des avis non créé");
+  }
 }
 
 // ---------------------------------------------------------------- Réglages Directus
@@ -654,9 +619,9 @@ async function projectSettings() {
     home: `${SITE_URL}/?${ve}`,
     seasons: `${SITE_URL}/?${ve}#tarifs`,
     faq: `${SITE_URL}/?${ve}#infos`,
+    reviews: `${SITE_URL}/?${ve}#avis`,
     rooms: `${SITE_URL}/chambres/{{slug}}?${ve}`,
     pages: `${SITE_URL}/{{slug}}?${ve}`,
-    booking_form: `${SITE_URL}/reserver?${ve}`,
   };
   for (const [collection, preview_url] of Object.entries(previews)) {
     const current = await api<{ meta: { preview_url: string | null } }>("GET", `/collections/${collection}`);
@@ -726,7 +691,7 @@ async function branding() {
     project_color: "#111111",
     default_appearance: "light",
     theme_light_overrides: THEME,
-    public_note: "Bienvenue ! Connectez-vous pour gérer les chambres, les tarifs, les textes et les demandes de réservation d'Ohana Lodge.",
+    public_note: "Bienvenue ! Connectez-vous pour gérer les chambres, les tarifs et les textes d'Ohana Lodge.",
   };
   // Images : posées une fois, l'administrateur peut ensuite les remplacer depuis Directus
   if (!current.project_logo) patch.project_logo = await brandingFile("logo.svg", "Logo du back-office", folderId);
@@ -744,7 +709,7 @@ async function branding() {
   }
 }
 
-/** Menu de gauche : les demandes en premier, puis un dossier « Contenu du site ». */
+/** Menu de gauche : un dossier « Contenu du site ». */
 async function navigation() {
   const FOLDER = "contenu_du_site";
   if (!(await exists(`/collections/${FOLDER}`))) {
@@ -756,13 +721,12 @@ async function navigation() {
     console.log("+ dossier Contenu du site");
   }
   const order: [string, string | null, number][] = [
-    ["booking_requests", null, 1],
-    [FOLDER, null, 2],
+    [FOLDER, null, 1],
     ["home", FOLDER, 1],
     ["rooms", FOLDER, 2],
     ["seasons", FOLDER, 3],
     ["faq", FOLDER, 4],
-    ["booking_form", FOLDER, 5],
+    ["reviews", FOLDER, 5],
     ["pages", FOLDER, 6],
     ["settings", FOLDER, 7],
   ];
@@ -775,36 +739,28 @@ async function navigation() {
     }
   }
   if (moved) console.log(`✓ menu : ${moved} collection(s) rangée(s)`);
+}
 
-  // Libellés et vue par défaut des demandes de réservation
-  await arrange("booking_requests", [
-    ["", [["status", "Statut"], ["date_created", "Reçue"], ["name", "Nom"], ["email", "E-mail"], ["phone", "Téléphone"], ["room", "Chambre"], ["arrival", "Arrivée"], ["departure", "Départ"], ["guests", "Voyageurs"], ["message", "Message"]]],
-  ]);
-  const view = {
-    layout: "tabular",
-    layout_query: { tabular: { fields: ["status", "name", "arrival", "departure", "guests", "room.name", "date_created"], sort: ["-date_created"], limit: 50 } },
-    layout_options: { tabular: { widths: { status: 140, name: 220, arrival: 130, departure: 130, guests: 110, "room.name": 200 } } },
-  };
-  const presets = await api<{ id: number; bookmark: string | null }[]>(
-    "GET",
-    "/presets?filter[collection][_eq]=booking_requests&filter[user][_null]=true&filter[role][_null]=true&fields=id,bookmark",
-  );
-  if (!presets.some((p) => p.bookmark === null)) {
-    await api("POST", "/presets", { collection: "booking_requests", user: null, role: null, ...view });
-    console.log("+ vue par défaut des demandes");
+/**
+ * Éléments d'anciennes versions, devenus inutiles (formulaire de demande et API Elloha remplacés par le widget Elloha).
+ * Rien n'est supprimé : ils sont seulement masqués dans le back-office, les données restent en base.
+ */
+async function retired() {
+  for (const collection of ["booking_requests", "booking_form"]) {
+    if (!(await exists(`/collections/${collection}`))) continue;
+    const { meta } = await api<{ meta: { hidden: boolean } }>("GET", `/collections/${collection}`);
+    if (!meta.hidden) {
+      await api("PATCH", `/collections/${collection}`, { meta: { hidden: true, group: null } });
+      console.log(`- collection ${collection} masquée`);
+    }
   }
-  if (!presets.some((p) => p.bookmark === "Nouvelles demandes")) {
-    await api("POST", "/presets", {
-      collection: "booking_requests",
-      user: null,
-      role: null,
-      bookmark: "Nouvelles demandes",
-      icon: "mark_email_unread",
-      color: "#E8A23B",
-      filter: { status: { _eq: "new" } },
-      ...view,
-    });
-    console.log("+ signet Nouvelles demandes");
+  for (const [collection, field] of [["settings", "notification_email"], ["rooms", "elloha_offer_id"]]) {
+    if (!(await exists(`/fields/${collection}/${field}`))) continue;
+    const { meta } = await api<{ meta: { hidden: boolean } | null }>("GET", `/fields/${collection}/${field}`);
+    if (!meta?.hidden) {
+      await api("PATCH", `/fields/${collection}/${field}`, { meta: { hidden: true } });
+      console.log(`- champ ${collection}.${field} masqué`);
+    }
   }
 }
 
@@ -929,10 +885,10 @@ async function seed() {
     booking_eyebrow: "Réserver en direct",
     booking_title: "Simple, en 4 étapes.",
     booking_steps: [
-      { title: "Votre demande", text: "En 1 minute sur ce site, sans paiement." },
-      { title: "Notre proposition", text: "Selon nos disponibilités, par e-mail." },
-      { title: "Votre confirmation", text: "Sous 5 jours : proposition signée et acompte de 30 % par virement." },
-      { title: "Sur place", text: "Le solde se règle à l'arrivée : CB, espèces ou virement." },
+      { title: "Vos dates", text: "Choisissez votre arrivée, le nombre de nuits et de voyageurs." },
+      { title: "Votre chambre", text: "Disponibilités et prix en temps réel." },
+      { title: "Paiement sécurisé", text: "Sur la page de notre partenaire Elloha, confirmation immédiate par e-mail." },
+      { title: "Sur place", text: "Accueil à partir de 17 h, petit-déjeuner inclus." },
     ],
     cancellation_title: "Annulation",
     cancellation_tiers: [
@@ -956,37 +912,6 @@ async function seed() {
     faq_title: "Les réponses, avant de réserver.",
     faq_intro: "Une autre question ? Appelez directement le",
     access_eyebrow: "Accès & contact",
-  });
-
-  await fillEmpty("booking_form", {
-    title: "Demande de réservation",
-    intro: "3 étapes, 1 minute. Aucun paiement sur le site : vous recevez d'abord une proposition.",
-    dates_title: "Vos dates",
-    dates_note: "Plusieurs chambres ? Précisez-le dans votre message (8 personnes max., enfants dès 16 ans).",
-    room_title: "Votre chambre",
-    room_note: "Disponibilités confirmées par le propriétaire dans sa proposition.",
-    contact_title: "Vos coordonnées",
-    message_placeholder: "Heure d'arrivée prévue, demande particulière…",
-    submit_label: "Envoyer ma demande",
-    reassurance: [
-      { text: "Sans commission, tarif direct" },
-      { text: "Petit-déjeuner inclus" },
-      { text: "Aucun paiement sur le site" },
-      { text: "Annulation gratuite jusqu'à J-60" },
-    ],
-    online_title: "Réserver votre séjour",
-    online_intro: "Vérifiez les disponibilités, choisissez votre chambre et réglez en ligne, en toute sécurité.",
-    online_submit_label: "Réserver et payer",
-    online_note: "Paiement sécurisé sur la page de notre partenaire Elloha.",
-    online_reassurance: [
-      { text: "Tarif direct, sans commission" },
-      { text: "Petit-déjeuner inclus" },
-      { text: "Disponibilité confirmée immédiatement" },
-    ],
-    none_available: "Aucune chambre n'est disponible à ces dates. Essayez d'autres dates ou appelez-nous : nous trouverons peut-être une solution.",
-    online_error: "La réservation en ligne ne répond pas pour le moment. Envoyez-nous une demande : nous vous répondons rapidement.",
-    success_title: "Demande envoyée, merci !",
-    success_text: "Vous recevez un e-mail récapitulatif. Nous vous adressons rapidement une proposition. Vous aurez ensuite 5 jours pour la confirmer avec un acompte de 30 % par virement.",
   });
 
   const seasons = await api<unknown[]>("GET", "/items/seasons?limit=1");
@@ -1037,4 +962,5 @@ await projectSettings();
 await seed();
 await branding();
 await navigation();
+await retired();
 console.log("✓ Directus prêt");

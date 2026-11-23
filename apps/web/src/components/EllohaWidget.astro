@@ -1,0 +1,337 @@
+---
+// Barre de réservation : widget officiel Elloha (« moteur de réservation », code fourni par le back-office Elloha).
+// Le script Elloha injecte son HTML dans le conteneur, puis ouvre le moteur Elloha (nouvel onglet) au clic sur « Rechercher ».
+//
+// Habillage : le script n'ajoute ses feuilles de style que si aucun élément ne porte déjà leur id.
+// Les <template> ci-dessous occupent ces id : aucun style Elloha ne s'applique, tout le rendu est défini ici.
+// Les identifiants ci-dessous sont publics (ils figurent dans le code d'intégration Elloha).
+import { telHref } from "@/lib/format";
+
+interface Props {
+  phone?: string | null;
+  email?: string | null;
+}
+
+const { phone, email } = Astro.props;
+
+const WIDGET_ID = "1405f1cd-4bcb-41a6-9646-6d60c53b6d67";
+const ESTABLISHMENT_ID = "f7f1f556-e2d8-4d9c-8f81-fd24c5c5cc8f"; // « idoi »
+const key = WIDGET_ID.replaceAll("-", "");
+const widgetUrl = `https://reservation.elloha.com/Widget/BookingEngine/${WIDGET_ID}?idoi=${ESTABLISHMENT_ID}&culture=fr-FR`;
+// Moteur Elloha en pleine page (ce qu'ouvre le widget) : lien de secours si le widget ne charge pas
+const engineUrl = `https://reservation.elloha.com/?idPublication=${WIDGET_ID}&idoi=${ESTABLISHMENT_ID}&culture=fr-FR`;
+---
+
+<template id="CoWidgetCss"></template>
+<template id="CoWidgetCss2"></template>
+<template id={`CoWidgetCssCustomUi_${WIDGET_ID}`}></template>
+
+<div class="elloha" data-state="loading">
+  <div id={`ConstellationWidgetContainer${WIDGET_ID}`} data-id-projet={key} data-src={widgetUrl}>
+    <!-- Squelette affiché pendant le chargement : mêmes dimensions que le widget, pas de saut de mise en page -->
+    <div id="ConstellationWidget" class="co-widget" aria-hidden="true">
+      <div class="co-widget-trip">
+        <div class="co-widget-date"><label>Arrivée</label><input tabindex="-1" disabled placeholder="Date" /></div>
+        <div class="co-widget-duration">
+          <label>Nuits</label><div class="co-widget-styled"><select tabindex="-1" disabled><option>1 nuit</option></select></div>
+        </div>
+      </div>
+      <div class="co-widget-occupancy">
+        <label>Voyageurs</label><div class="co-widget-div-resume-capa"><input tabindex="-1" disabled value="1 chambre · 2 adultes" /></div>
+      </div>
+      <div class="co-widget-search"><button tabindex="-1" disabled>Voir les disponibilités</button></div>
+    </div>
+    <p class="sr-only" role="status">Chargement de la réservation en ligne…</p>
+  </div>
+
+  <div class="elloha-fallback" role="alert">
+    <p>
+      <a href={engineUrl} target="_blank" rel="noopener">Réserver sur notre page de réservation en ligne</a>
+      {(phone || email) && " ou contactez-nous : "}
+      {phone && <a href={telHref(phone)}>{phone}</a>}
+      {phone && email && " · "}
+      {email && <a href={`mailto:${email}`}>{email}</a>}
+    </p>
+  </div>
+  <noscript>
+    <style>.elloha [data-id-projet] { display: none; } .elloha .elloha-fallback { display: block; }</style>
+  </noscript>
+</div>
+
+<script>
+  type Fn = (...args: unknown[]) => void;
+  const w = window as unknown as Record<string, unknown>;
+  const LOADER = "https://reservation.elloha.com/Scripts/widget-loader.min.js?v=42";
+
+  const root = document.querySelector<HTMLElement>(".elloha");
+  const container = root?.querySelector<HTMLElement>("[data-id-projet]");
+
+  if (root && container) {
+    const key = container.dataset.idProjet!;
+    let done = false;
+    const fail = () => {
+      if (!done) root.dataset.state = "error";
+    };
+
+    const load = () => {
+      w[`constellationWidgetUrl${key}`] = container.dataset.src;
+      w[`constellationTypeModule${key}`] = 1;
+      w[`constellationWidgetCallback${key}`] = () => {
+        done = true;
+        root.dataset.state = "ready";
+        enhance(container);
+      };
+      const script = document.createElement("script");
+      script.src = LOADER;
+      script.async = true;
+      script.onload = () => (w.constellationWidgetLoad as Fn)(container.id);
+      script.onerror = fail;
+      document.head.append(script);
+      setTimeout(fail, 15_000); // Elloha ne répond pas
+    };
+
+    // Chargé à l'approche de la barre : ne retarde pas l'affichage de la photo d'accueil
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          io.disconnect();
+          load();
+        }
+      },
+      { rootMargin: "600px" },
+    );
+    io.observe(root);
+  }
+
+  /** Ajustements du HTML Elloha (appelé avant que le script Elloha n'y branche ses événements). */
+  function enhance(el: HTMLElement) {
+    const $ = <T extends Element = HTMLElement>(sel: string) => el.querySelector<T>(sel);
+
+    // Icônes Elloha inutiles : on dessine les nôtres en CSS
+    el.querySelectorAll('link[href*="font-awesome"], link[href*="line-awesome"]').forEach((l) => l.remove());
+
+    const setText = (sel: string, text: string) => {
+      const node = $(sel);
+      if (node) node.textContent = text;
+    };
+    setText(".co-widget-date label", "Arrivée");
+    setText(".co-widget-duration label", "Nuits");
+    setText("#lblTitleNbLoc", "Voyageurs");
+    setText("#BtnLaunchBooking", "Voir les disponibilités");
+    $(".co-widget-date label")?.setAttribute("for", "FieldDate");
+    $<HTMLInputElement>("#FieldDate")?.setAttribute("placeholder", "Date");
+
+    // Voyageurs : Elloha ne tient compte des occupants que si le panneau de détail est « ouvert ».
+    // On l'ouvre d'office et on le présente en menu déroulant (.elloha-pop) sous un résumé mis à jour.
+    const occupancy = $(".co-widget-occupancy");
+    const resume = $(".co-widget-div-resume-capa");
+    const summary = $<HTMLInputElement>("#tbResumeCapa");
+    const panels = [...el.querySelectorAll(".co-widget-occupancy-define, .co-widget-occupancy-add")];
+    if (!occupancy || !resume || !summary || !panels.length) return;
+    resume.classList.add("co-widget-d-none");
+    const pop = document.createElement("div");
+    pop.className = "elloha-pop";
+    pop.id = "elloha-voyageurs";
+    panels[0].before(pop);
+    panels.forEach((n) => {
+      n.classList.remove("co-widget-d-none");
+      pop.append(n); // les chambres ajoutées par Elloha s'insèrent à côté de la première, donc ici aussi
+    });
+    summary.setAttribute("role", "combobox");
+    summary.setAttribute("aria-controls", pop.id);
+    summary.setAttribute("aria-expanded", "false");
+
+    // Boutons +/− : des <a> sans href chez Elloha, rendus accessibles au clavier (y compris dans les chambres ajoutées)
+    const a11y = () =>
+      pop.querySelectorAll<HTMLElement>("a.co-widget-action:not([role])").forEach((a) => {
+        a.setAttribute("role", "button");
+        a.tabIndex = 0;
+        a.setAttribute("aria-label", a.querySelector(".co-widget-minus") ? "Retirer" : "Ajouter");
+      });
+    a11y();
+    pop.addEventListener("keydown", (e) => {
+      const a = (e.target as Element).closest<HTMLElement>("a.co-widget-action");
+      if (a && (e.key === "Enter" || e.key === " ")) {
+        e.preventDefault();
+        a.click();
+      }
+    });
+
+    const plural = (n: number, word: string) => `${n} ${word}${n > 1 ? "s" : ""}`;
+    const refresh = () => {
+      const sum = (sel: string) => [...el.querySelectorAll<HTMLInputElement>(sel)].reduce((t, i) => t + Number(i.value || 0), 0);
+      const rooms = el.querySelectorAll(".co-widget-occupancy-define").length;
+      const adults = sum('input[id^="HfNbAdult"]');
+      const children = sum('input[id^="HfNbChild"]');
+      summary.value = [plural(rooms, "chambre"), plural(adults, "adulte"), children && plural(children, "enfant")].filter(Boolean).join(" · ");
+    };
+    const toggle = (open = !occupancy.hasAttribute("data-open")) => {
+      occupancy.toggleAttribute("data-open", open);
+      if (open) a11y();
+      summary.setAttribute("aria-expanded", String(open));
+    };
+    refresh();
+
+    summary.addEventListener("click", () => toggle());
+    summary.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " " || e.key === "ArrowDown") {
+        e.preventDefault();
+        toggle(true);
+      }
+    });
+    // Après les gestionnaires Elloha (+/−, ajout/suppression de chambre)
+    pop.addEventListener("click", () =>
+      setTimeout(() => {
+        refresh();
+        a11y();
+      }),
+    );
+    document.addEventListener("click", (e) => {
+      if (!occupancy.contains(e.target as Node)) toggle(false);
+    });
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Escape" && occupancy.hasAttribute("data-open")) {
+        toggle(false);
+        summary.focus();
+      }
+    });
+  }
+</script>
+
+<style is:global>
+  @reference "../styles/global.css";
+
+  /* ---------- Barre (squelette et widget partagent ce rendu) ---------- */
+  .elloha { container-type: inline-size; }
+  .elloha .co-widget {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    align-items: end;
+    gap: 10px;
+    font-family: var(--font-sans);
+  }
+  .elloha .co-widget-trip { display: contents; }
+  .elloha .co-widget-occupancy,
+  .elloha .co-widget-search { grid-column: 1 / -1; }
+  @container (min-width: 760px) {
+    .elloha .co-widget { grid-template-columns: 1.25fr 1fr 1.4fr auto; gap: 12px; }
+    .elloha .co-widget-occupancy,
+    .elloha .co-widget-search { grid-column: auto; }
+  }
+
+  .elloha .co-widget-title,
+  .elloha .co-widget-d-none:not(.co-widget-div-resume-capa),
+  .elloha i.co-widget-icon,
+  .elloha #btnResumeCapa { display: none; }
+
+  .elloha .co-widget-date,
+  .elloha .co-widget-duration,
+  .elloha .co-widget-occupancy { @apply relative flex min-w-0 flex-col gap-1.5; }
+  .elloha label:not(.co-widget-ignore) { @apply text-[13px] font-medium text-muted; }
+
+  .elloha #FieldDate,
+  .elloha .co-widget-date input,
+  .elloha .co-widget-styled select,
+  .elloha .co-widget-tb-resume-capa,
+  .elloha .co-widget-div-resume-capa input {
+    @apply h-12 w-full min-w-0 cursor-pointer appearance-none rounded-[10px] border border-field bg-white px-3 text-base text-ink placeholder:text-muted;
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 18px;
+    padding-right: 40px;
+  }
+  .elloha .co-widget-date input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d201d' stroke-width='1.6' stroke-linecap='round'%3E%3Crect x='3' y='5' width='18' height='16' rx='2'/%3E%3Cpath d='M3 10h18M8 3v4M16 3v4'/%3E%3C/svg%3E");
+  }
+  .elloha .co-widget-styled select,
+  .elloha .co-widget-div-resume-capa input {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d201d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .elloha [aria-expanded="true"] { @apply border-ink; }
+
+  .elloha .co-widget-search button {
+    @apply flex h-12 w-full cursor-pointer items-center justify-center rounded-[10px] bg-night px-6 font-semibold whitespace-nowrap text-white hover:bg-ink;
+  }
+  .elloha [disabled] { cursor: default; }
+
+  /* ---------- Menu déroulant « Voyageurs » ---------- */
+  .elloha-pop {
+    @apply absolute inset-x-0 z-30 max-h-[70vh] overflow-y-auto rounded-[14px] border border-line bg-white px-4 pb-1;
+    top: calc(100% + 6px);
+    box-shadow: 0 16px 40px rgba(17, 17, 17, 0.16);
+  }
+  .elloha .co-widget-occupancy:not([data-open]) .elloha-pop { display: none; }
+  @container (min-width: 760px) {
+    .elloha-pop { right: auto; width: max(100%, 320px); }
+  }
+  .elloha .co-widget-occupancy-define > div { @apply flex items-center justify-between gap-4 border-b border-line py-3; }
+  /* Une seule chambre : inutile d'afficher « Chambre 1 » */
+  .elloha-pop:not(:has(.co-widget-occupancy-define ~ .co-widget-occupancy-define)) .co-widget-title-room { display: none; }
+  .elloha .co-widget-occupancy-define > div > div { @apply flex items-center gap-3; }
+  .elloha .co-widget-title-room { @apply text-[13px] font-semibold tracking-[0.08em] uppercase text-muted; }
+  .elloha .co-widget-remove { @apply cursor-pointer font-normal normal-case tracking-normal underline underline-offset-4; }
+  .elloha .co-widget-occupancy-define label { @apply text-[15px] text-ink; }
+  .elloha .co-widget-occupancy-define .lbl-number-a,
+  .elloha .co-widget-occupancy-define .lbl-number-c { @apply min-w-6 text-center font-semibold tabular-nums; }
+  .elloha a.co-widget-action {
+    @apply flex size-9 cursor-pointer items-center justify-center rounded-full border border-field text-lg leading-none text-ink select-none hover:border-ink hover:text-ink;
+  }
+  .elloha a.co-widget-action:has(.co-widget-minus)::before { content: "−"; }
+  .elloha a.co-widget-action:has(.co-widget-plus)::before { content: "+"; }
+  .elloha .co-widget-div-age { @apply flex-wrap; }
+  .elloha .co-widget-div-age label { @apply w-full text-[13px] text-muted; }
+  .elloha .co-widget-select-age {
+    @apply h-10 flex-1 cursor-pointer appearance-none rounded-lg border border-field bg-white bg-no-repeat pr-8 pl-3 text-[15px];
+    background-position: right 10px center;
+    background-size: 16px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d201d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  }
+  .elloha .co-widget-occupancy-add { @apply py-2; }
+  .elloha .co-widget-occupancy-add button { @apply min-h-11 cursor-pointer font-semibold underline underline-offset-4; }
+
+  /* ---------- Repli : Elloha indisponible ou JavaScript désactivé ---------- */
+  .elloha-fallback { display: none; @apply py-1 text-body; }
+  .elloha-fallback a { @apply font-semibold text-ink underline underline-offset-4; }
+  .elloha[data-state="error"] [data-id-projet] { display: none; }
+  .elloha[data-state="error"] .elloha-fallback { display: block; }
+
+  /* ---------- Calendrier (ajouté par Elloha à la fin de <body>) ---------- */
+  .pika-cnstell-single {
+    @apply absolute z-30 rounded-2xl border border-line bg-white p-3 text-ink;
+    font-family: var(--font-sans);
+    box-shadow: 0 16px 40px rgba(17, 17, 17, 0.16);
+  }
+  .pika-cnstell-single.is-hidden { display: none; }
+  .pika-cnstell-lendar { width: 294px; }
+  .pika-cnstell-title { @apply relative mb-1 flex h-10 items-center justify-center; }
+  .pika-cnstell-label { @apply relative px-1 text-[15px] font-semibold capitalize; }
+  .pika-cnstell-label .pika-cnstell-select { @apply absolute inset-0 cursor-pointer opacity-0; }
+  .pika-cnstell-prev,
+  .pika-cnstell-next {
+    @apply absolute top-1/2 size-9 -translate-y-1/2 cursor-pointer rounded-full border-0 bg-transparent bg-center bg-no-repeat hover:bg-sand;
+    background-size: 18px;
+  }
+  .pika-cnstell-prev {
+    left: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d201d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M15 6l-6 6 6 6'/%3E%3C/svg%3E");
+  }
+  .pika-cnstell-next {
+    right: 0;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%231d201d' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 6l6 6-6 6'/%3E%3C/svg%3E");
+  }
+  .pika-cnstell-prev.is-disabled,
+  .pika-cnstell-next.is-disabled { @apply cursor-default opacity-25 hover:bg-transparent; }
+  .pika-cnstell-table { @apply w-full table-fixed border-collapse; }
+  .pika-cnstell-table th { @apply pb-1 text-center text-xs font-medium text-muted; }
+  .pika-cnstell-table abbr { text-decoration: none; }
+  .pika-cnstell-table td { padding: 1px; }
+  .pika-cnstell-button {
+    @apply mx-auto block size-10 cursor-pointer rounded-full border-0 bg-transparent text-center text-sm text-ink tabular-nums hover:bg-sand;
+  }
+  .is-today .pika-cnstell-button { @apply font-bold underline underline-offset-4; }
+  /* Complet, ou arrivée impossible ce jour-là (Elloha) */
+  :is(.is-not-available, .no-arrival) .pika-cnstell-button { @apply text-stone line-through; }
+  .is-disabled .pika-cnstell-button { @apply cursor-default text-stone opacity-60 hover:bg-transparent; }
+  .is-selected .pika-cnstell-button,
+  .is-selected .pika-cnstell-button:hover { @apply bg-night font-semibold text-white no-underline; }
+</style>
